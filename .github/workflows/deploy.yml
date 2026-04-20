@@ -40,6 +40,10 @@ jobs:
           region: ${{ env.REGION }}
           image: us-central1-docker.pkg.dev/${{ env.PROJECT_ID }}/flowcraft/${{ env.SERVICE_NAME }}
           flags: '--allow-unauthenticated --port=8080'
+          env_vars: |-
+            GOOGLE_GEMINI_API_KEY=${{ secrets.GOOGLE_GEMINI_API_KEY }}
+            GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}
+            FIREBASE_PROJECT_ID=${{ env.PROJECT_ID }}
 
       # --- Client Deployment (Firebase Hosting) ---
       - name: Install Client Dependencies
