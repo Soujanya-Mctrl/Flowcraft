@@ -29,7 +29,9 @@ jobs:
       # --- Server Deployment (Cloud Run) ---
       - name: Build and Push Container
         run: |-
-          gcloud builds submit --tag gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }} ./server
+          gcloud auth configure-docker gcr.io --quiet
+          docker build -t gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }} ./server
+          docker push gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}
 
       - name: Deploy to Cloud Run
         uses: google-github-actions/deploy-cloudrun@v2
