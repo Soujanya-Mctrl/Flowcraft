@@ -1,5 +1,5 @@
 {
-  "name": "flowcraft/client",
+  "name": "flowcraft-client",
   "private": true,
   "version": "0.0.0",
   "type": "module",

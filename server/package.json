@@ -1,5 +1,5 @@
 {
-  "name": "flowcraft/server",
+  "name": "flowcraft-server",
   "version": "1.0.0",
   "description": "Server of flowcraft.ai",
   "main": "index.js",
