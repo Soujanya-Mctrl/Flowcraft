@@ -29,16 +29,16 @@ jobs:
       # --- Server Deployment (Cloud Run) ---
       - name: Build and Push Container
         run: |-
-          gcloud auth configure-docker gcr.io --quiet
-          docker build -t gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }} ./server
-          docker push gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}
+          gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+          docker build -t us-central1-docker.pkg.dev/${{ env.PROJECT_ID }}/flowcraft/${{ env.SERVICE_NAME }} ./server
+          docker push us-central1-docker.pkg.dev/${{ env.PROJECT_ID }}/flowcraft/${{ env.SERVICE_NAME }}
 
       - name: Deploy to Cloud Run
         uses: google-github-actions/deploy-cloudrun@v2
         with:
           service: ${{ env.SERVICE_NAME }}
           region: ${{ env.REGION }}
-          image: gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}
+          image: us-central1-docker.pkg.dev/${{ env.PROJECT_ID }}/flowcraft/${{ env.SERVICE_NAME }}
           flags: '--allow-unauthenticated --port=8080'
 
       # --- Client Deployment (Firebase Hosting) ---
