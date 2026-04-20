@@ -284,15 +284,15 @@ const MermaidEditor = () => {
 
     const lowerText = text.toLowerCase();
     let firstKeywordIndex = -1;
-    let selectedKeyword = "";
+
 
     for (const kw of mermaidKeywords) {
       const idx = lowerText.indexOf(kw.toLowerCase());
       if (idx !== -1 && (firstKeywordIndex === -1 || idx < firstKeywordIndex)) {
         firstKeywordIndex = idx;
-        selectedKeyword = kw;
       }
     }
+
 
     if (firstKeywordIndex !== -1) {
       // Return everything from the first keyword onwards
