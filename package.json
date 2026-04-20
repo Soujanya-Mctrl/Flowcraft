@@ -1,0 +1,13 @@
+{
+  "name": "flowcraft-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "dependencies": {
+    "firebase": "^12.12.0"
+  }
+}
+
