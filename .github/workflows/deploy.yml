@@ -1,0 +1,57 @@
+name: Deploy to Cloud Run and Firebase Hosting
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  PROJECT_ID: flowcraft-95bf4
+  REGION: us-central1
+  SERVICE_NAME: flowcraft-api
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Google Auth
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      # --- Server Deployment (Cloud Run) ---
+      - name: Build and Push Container
+        run: |-
+          gcloud builds submit --tag gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }} ./server
+
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE_NAME }}
+          region: ${{ env.REGION }}
+          image: gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}
+          flags: '--allow-unauthenticated --port=8080'
+
+      # --- Client Deployment (Firebase Hosting) ---
+      - name: Install Client Dependencies
+        run: npm install
+        working-directory: ./client
+
+      - name: Build Client
+        run: npm run build
+        working-directory: ./client
+
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.GCP_SA_KEY }}
+          channelId: live
+          projectId: ${{ env.PROJECT_ID }}

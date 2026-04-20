@@ -6,7 +6,14 @@
     "client",
     "server"
   ],
+  "scripts": {
+    "dev:client": "npm run dev -w client",
+    "dev:server": "npm run dev -w server",
+    "build": "npm run build --workspaces",
+    "deploy:info": "echo 'Deployments are handled automatically by GitHub Actions on push to main.'"
+  },
   "dependencies": {
+
     "firebase": "^12.12.0"
   }
 }
