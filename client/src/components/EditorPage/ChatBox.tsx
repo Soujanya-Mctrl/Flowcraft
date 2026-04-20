@@ -137,7 +137,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({
         zIndex: zIndex,
       }}
       onMouseDown={() => onFocus?.()}
-      className={`border border-border-primary bg-bg-primary flex flex-col w-[450px] overflow-hidden rounded-container transition-all duration-200 ${collapsed ? "h-auto" : "h-[650px]"}`}
+      className={`border border-border-primary bg-bg-primary flex flex-col w-[450px] overflow-hidden rounded-container shadow-2xl shadow-black/10 transition-all duration-200 ${collapsed ? "h-auto" : "h-[650px]"}`}
     >
       {/* Minimal Header */}
       <div
@@ -152,15 +152,15 @@ const ChatBox: React.FC<ChatBoxProps> = ({
         </div>
         <div className="flex items-center gap-1">
           <button
-            className="p-2 hover:bg-[#f5f5f5] rounded-full transition-colors text-[#737373] hover:text-black"
+            className="p-2 hover:bg-bg-secondary rounded-full transition-colors text-text-secondary hover:text-text-primary"
             onClick={onClearChat}
             title="Clear Chat"
           >
             <Trash2 size={16} />
           </button>
-          <div className="w-px h-4 bg-[#e5e5e5] mx-1" />
+          <div className="w-px h-4 bg-border-primary mx-1" />
           <button
-            className="p-2 hover:bg-[#f5f5f5] rounded-full transition-colors text-[#737373] hover:text-black"
+            className="p-2 hover:bg-bg-secondary rounded-full transition-colors text-text-secondary hover:text-text-primary"
             onClick={() => setCollapsed(!collapsed)}
             title={collapsed ? "Expand" : "Minimize"}
           >
@@ -177,7 +177,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({
               onClick={() => setMode("conversation")}
               className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] transition-all rounded-pill ${
                 mode === "conversation"
-                  ? "bg-[#e5e5e5] text-[#262626] border border-[#d4d4d4]"
+                  ? "bg-text-primary/10 text-text-primary border border-border-secondary"
                   : "text-text-muted hover:text-text-primary"
               }`}
             >
@@ -187,7 +187,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({
               onClick={() => hasExistingDiagram && setMode("enhancement")}
               className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] transition-all rounded-pill ${
                 mode === "enhancement"
-                  ? "bg-[#e5e5e5] text-[#262626] border border-[#d4d4d4]"
+                  ? "bg-text-primary/10 text-text-primary border border-border-secondary"
                   : hasExistingDiagram
                   ? "text-text-muted hover:text-text-primary"
                   : "text-text-muted opacity-30 cursor-not-allowed"

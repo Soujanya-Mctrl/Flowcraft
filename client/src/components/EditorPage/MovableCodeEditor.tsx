@@ -95,7 +95,7 @@ const MovableCodeEditor: React.FC<MovableCodeEditorProps> = ({
         zIndex: zIndex,
       }}
       onMouseDown={() => onFocus?.()}
-      className="border border-border-primary bg-bg-primary flex flex-col h-[500px] w-[500px] overflow-hidden rounded-container"
+      className="border border-border-primary bg-bg-primary flex flex-col h-[500px] w-[500px] overflow-hidden rounded-container shadow-2xl shadow-black/10"
     >
       {/* Minimal Header */}
       <div
@@ -136,7 +136,7 @@ const MovableCodeEditor: React.FC<MovableCodeEditorProps> = ({
             {copiedToClipboard ? <Check size={14} className="text-text-primary" /> : <Copy size={14} />}
           </button>
           <button
-            className="ml-2 p-2 hover:bg-bg-secondary rounded-pill transition-colors"
+            className="ml-2 p-2 hover:bg-bg-secondary rounded-pill transition-colors text-text-primary"
             onClick={() => setIsOpen(false)}
           >
             <X size={16} />

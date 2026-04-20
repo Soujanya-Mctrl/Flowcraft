@@ -62,7 +62,7 @@ const MermaidEditor = () => {
   const [history, setHistory] = useState<string[]>([default_code]);
   const [redoStack, setRedoStack] = useState<string[]>([]);
   const [imageTitle, setimageTitle] = useState("Flowcraft_" + uuidv4());
-  const [, setIsDark] = useState(false);
+  const [isDark, setIsDark] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [model, setModel] = useState(
     "llama-3.3-70b-versatile"
@@ -1098,13 +1098,18 @@ const MermaidEditor = () => {
     }
   }, [embedCode, showError]);
 
-  const [isDarkMode] = useState(
-    localStorage.getItem("theme") === "dark" ||
-      (!("theme" in localStorage) &&
-        window.matchMedia("(prefers-color-scheme: dark)").matches)
-  );
+  // Consolidated theme handling logic in one place
+
 
   useEffect(() => {
+    const getInitialTheme = () => {
+      const savedTheme = localStorage.getItem("theme");
+      if (savedTheme) return savedTheme === "dark";
+      return window.matchMedia("(prefers-color-scheme: dark)").matches;
+    };
+    
+    setIsDark(getInitialTheme());
+
     const handler = () => {
       setIsDark(document.documentElement.classList.contains("dark"));
     };
@@ -1165,7 +1170,13 @@ const MermaidEditor = () => {
       )}
 
       {/* Canvas */}
-      <div className="flex-1 w-full overflow-hidden relative bg-white dark:bg-apple-black">
+      <div 
+        className="flex-1 w-full overflow-hidden relative bg-bg-primary"
+        style={{
+          backgroundImage: `radial-gradient(var(--border-primary) 1px, transparent 1px)`,
+          backgroundSize: '24px 24px'
+        }}
+      >
         {isCanvasEditMode && (
           <div className="absolute top-6 left-6 bg-text-primary text-bg-primary px-4 py-1.5 rounded-pill text-[13px] font-medium z-[400] border border-border-primary">
             Canvas Edit Mode
@@ -1237,7 +1248,7 @@ const MermaidEditor = () => {
           copiedToClipboard={copiedToClipboard}
           history={history}
           redoStack={redoStack}
-          isDark={isDarkMode}
+          isDark={isDark}
           zIndex={windowZIndices.editor}
           onFocus={() => bringToFront("editor")}
         />

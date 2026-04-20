@@ -1,33 +1,39 @@
-# Server dmaid.cloud
+# Flowcraft API (Server)
 
-## Technologies
+The backend engine for **flowcraft.ai**, responsible for AI diagram generation, enhancement, and database management.
 
-- REST API
-- MongoDB
-- Express
-- Node.js
-- TypeScript
-- Google Gemini
+## 🚀 Technology Stack
+- **Framework**: Express (Node.js) with TypeScript
+- **AI Models**: Google Gemini & Groq (Llama 3.3, DeepSeek)
+- **Database**: Firebase Firestore (via Firebase Admin SDK)
+- **Deployment**: Google Cloud Run (Containerized via Docker)
+- **CI/CD**: GitHub Actions
 
-entry point: `src/index.ts`
+## 📂 Architecture
+- `src/api/`: Main API router and endpoint definitions.
+- `src/controllers/`: Business logic for AI processing and diagram management.
+- `src/db/`: Firestore initialization and database helpers.
+- `src/services/`: External AI service integrations (Gemini, Groq).
 
-## How to Run
+## 🛠️ Local Development
 
-1. Open the root dir.
-2. Move to server:
+As part of the Flowcraft monorepo, it is recommended to run this from the root directory:
 
+```bash
+# Run server in dev mode from root
+npm run dev:server
+```
+
+Otherwise, manually:
 ```bash
 cd server
-```
-
-3. Install dependencies:
-
-```bash
 npm install
-```
-
-4. Run the server:
-
-```bash
 npm run dev
 ```
+
+## ⚙️ Environment Variables
+Required variables in `.env`:
+- `GOOGLE_GEMINI_API_KEY`: API key from Google AI Studio.
+- `GROQ_API_KEY`: API key from Groq Console.
+- `FIREBASE_PROJECT_ID`: `flowcraft-95bf4`
+- `PORT`: (Default: 3000, Cloud Run will provide 8080)
