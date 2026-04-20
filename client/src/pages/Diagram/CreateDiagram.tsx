@@ -322,6 +322,10 @@ const MermaidEditor = () => {
     sanitized = sanitized.replace(/\(\(([^)]*?)\)/g, "(($1))");
     sanitized = sanitized.replace(/\{\{([^\}]*?)\}/g, "{{$1}}");
 
+    // 3. Fix unquoted labels with parentheses to prevent Mermaid parse errors
+    // Ensures [factorial(n-1)] becomes ["factorial(n-1)"]
+    sanitized = sanitized.replace(/([\[\(\{]+)([^"\]\)\}]+[\(\)][^"\]\)\}]+)([\]\)\}]+)/g, '$1"$2"$3');
+
     // 3. Ensure each line doesn't start with accidental markdown symbols
     let lines = sanitized.split("\n").map(line => {
       const trimmed = line.trim();
