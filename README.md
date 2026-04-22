@@ -92,8 +92,8 @@ flowchart TD
 
 | Component | Host | URL |
 | :--- | :--- | :--- |
-| **Production Frontend** | Firebase Hosting | [https://flowcraft.ai](https://flowcraft.ai) |
-| **Production Backend** | Google Cloud Run | [https://api.flowcraft.ai](https://api.flowcraft.ai) |
+| **Production Frontend** | Firebase Hosting | [https://flowcraft-95bf4.web.app/](https://flowcraft-95bf4.web.app/) |
+| **Production Backend** | Google Cloud Run | [https://api-7tdj5m34va-uc.a.run.app](https://api-7tdj5m34va-uc.a.run.app) |
 
 ---
 
