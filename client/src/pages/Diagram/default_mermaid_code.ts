@@ -1,36 +1,35 @@
-export const default_code = `%% Complex flowchart with decisions, loops, and subgraphs
-graph TD;
-  A[Start] --> B{User Authenticated?};
-  B -- Yes --> C[Load Dashboard];
-  B -- No --> D[Show Login Screen];
+export const default_code = `flowchart TD
+    Start[Start] --> Auth{"User Authenticated?"}
+    Auth -->|Yes| Dash[Load Dashboard]
+    Auth -->|No| Login["Show Login Screen"]
 
-  subgraph "Authentication Process"
-    D --> E{Valid Credentials?};
-    E -- Yes --> F[Redirect to Dashboard];
-    E -- No --> G[Show Error Message];
-    G -->|Retry| D;
-  end
+    subgraph "Authentication Process"
+        Login --> Creds{"Valid Credentials?"}
+        Creds -->|Yes| Redirect[Redirect to Dashboard]
+        Creds -->|No| Err[Show Error Message]
+        Err -->|Retry| Login
+    end
 
-  C --> H{Has Notifications?};
-  H -- Yes --> I[Show Notifications Panel];
-  H -- No --> J[Skip];
+    Dash --> Notifs{"Has Notifications?"}
+    Notifs -->|Yes| Panel[Show Notifications Panel]
+    Notifs -->|No| Skip[Skip]
 
-  subgraph "User Actions"
-    I --> K[View Messages];
-    K --> L{Respond?};
-    L -- Yes --> M[Open Reply Window];
-    L -- No --> N[Close Panel];
-  end
+    subgraph "User Actions"
+        Panel --> Msg[View Messages]
+        Msg --> Resp{"Respond?"}
+        Resp -->|Yes| Reply[Open Reply Window]
+        Resp -->|No| Close[Close Panel]
+    end
 
-  J --> O{Check Permissions};
-  O -- Admin --> P[Show Admin Panel];
-  O -- User --> Q[Show User Dashboard];
+    Skip --> Perms{"Check Permissions"}
+    Perms -->|Admin| AdminP[Show Admin Panel]
+    Perms -->|User| UserD[Show User Dashboard]
 
-  P --> R[Manage Users];
-  P --> S[View Reports];
-  Q --> T[Edit Profile];
-  Q --> U[View Purchases];
+    AdminP --> Manage[Manage Users]
+    AdminP --> Reports[View Reports]
+    UserD --> Profile[Edit Profile]
+    UserD --> Purchases[View Purchases]
 
-  R & S & T & U --> V[Logout];
-  V --> W[End];
+    Manage & Reports & Profile & Purchases --> Logout[Logout]
+    Logout --> End[End]
 `;

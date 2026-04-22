@@ -30,7 +30,7 @@ const ExampleList: React.FC = () => {
                 onClick={() => handleCodeChange(example.code)}
                 className="group overflow-hidden border border-border-primary bg-bg-primary transition-all duration-300 hover:border-text-primary/30 rounded-lg"
               >
-                <div className="aspect-[4/3] bg-black/5 dark:bg-white/5 p-4 flex items-center justify-center">
+                <div className="aspect-[4/3] bg-bg-primary p-4 flex items-center justify-center">
                   <div className="w-full h-full flex items-center justify-center transition-transform duration-500 group-hover:scale-105">
                     <MermaidImage code={example.code} />
                   </div>

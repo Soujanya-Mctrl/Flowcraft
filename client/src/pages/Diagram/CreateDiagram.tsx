@@ -9,6 +9,7 @@ import {
   Copy,
   Sparkles,
   X,
+  ChevronRight,
 } from "lucide-react";
 import { default_code } from "./default_mermaid_code";
 import { v4 as uuidv4 } from "uuid";
@@ -28,6 +29,7 @@ interface ApiResponse {
   data?: {
     diagram?: string;
     title?: string;
+    explanation?: string;
   };
   message?: string;
   error?: string;
@@ -64,10 +66,12 @@ const MermaidEditor = () => {
   const [imageTitle, setimageTitle] = useState("Flowcraft_" + uuidv4());
   const [isDark, setIsDark] = useState(false);
   const [prompt, setPrompt] = useState("");
-  const [model, setModel] = useState(
-    "llama-3.3-70b-versatile"
-  );
-  const [diagramType, setDiagramType] = useState("auto");
+  const [model, setModel] = useState(() => {
+    return localStorage.getItem("selected_model") || "llama-3.3-70b-versatile";
+  });
+  const [diagramType, setDiagramType] = useState(() => {
+    return localStorage.getItem("selected_diagram_type") || "auto";
+  });
   const [isCanvasEditMode, setIsCanvasEditMode] = useState(false);
   interface SelectedElement {
     element: HTMLElement;
@@ -93,13 +97,35 @@ const MermaidEditor = () => {
   const [isAIGeneratingDiagram, setIsAIGeneratingDiagram] = useState(false);
   const [isAIGeneratingTitle, setIsAIGeneratingTitle] = useState(false);
   const [isSidebarSticky, setIsSidebarSticky] = useState(() => {
-    return localStorage.getItem("sidebar_sticky") === "true";
+    const stored = localStorage.getItem("sidebar_sticky");
+    return stored === null ? true : stored === "true";
   });
+  const [isSidebarHovered, setIsSidebarHovered] = useState(false);
+  const sidebarHoverTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  const handleSidebarMouseEnter = () => {
+    if (sidebarHoverTimeout.current) clearTimeout(sidebarHoverTimeout.current);
+    setIsSidebarHovered(true);
+  };
+
+  const handleSidebarMouseLeave = () => {
+    sidebarHoverTimeout.current = setTimeout(() => {
+      setIsSidebarHovered(false);
+    }, 1000);
+  };
 
   // Persist sidebar state
   useEffect(() => {
     localStorage.setItem("sidebar_sticky", isSidebarSticky.toString());
   }, [isSidebarSticky]);
+
+  useEffect(() => {
+    localStorage.setItem("selected_model", model);
+  }, [model]);
+
+  useEffect(() => {
+    localStorage.setItem("selected_diagram_type", diagramType);
+  }, [diagramType]);
 
   // Window Z-Index management
   const [windowZIndices, setWindowZIndices] = useState({
@@ -134,23 +160,23 @@ const MermaidEditor = () => {
 
   const models: Model[] = [
     {
-      name: "Llama 3.1 [8B]",
-      description: "Fast and efficient",
-      model: "llama-3.1-8b-instant",
-    },
-    {
       name: "Llama 3.3 [70B]",
-      description: "",
+      description: "Powerful & Logical",
       model: "llama-3.3-70b-versatile",
     },
     {
-      name: "DeepSeek R1 [70B]",
-      description: "",
-      model: "deepseek-r1-distill-llama-70b",
+      name: "Gemini 2.0 Flash",
+      description: "Fast & Precise",
+      model: "gemini-2.0-flash",
+    },
+    {
+      name: "Llama 3.1 [8B]",
+      description: "Ultra-fast",
+      model: "llama-3.1-8b-instant",
     },
     {
       name: "Kimi K2 [70B]",
-      description: "",
+      description: "Deep reasoning",
       model: "moonshotai/kimi-k2-instruct",
     },
   ];
@@ -274,29 +300,26 @@ const MermaidEditor = () => {
       return match[1].trim();
     }
 
-    // 2. Fallback: Search for the FIRST occurrence of a valid mermaid keyword
-    // This allows us to ignore "### Title" or "Here is your diagram:" text
     const mermaidKeywords = [
       "graph TD", "graph LR", "graph ", "flowchart TD", "flowchart LR", "flowchart ",
       "sequenceDiagram", "classDiagram", "stateDiagram-v2", "erDiagram", 
       "gantt", "pie", "journey", "mindmap", "timeline", "gitGraph", "C4Context"
     ];
 
-    const lowerText = text.toLowerCase();
-    let firstKeywordIndex = -1;
+    // 2. Fallback: Search for keywords strictly at the beginning of a line
+    const lines = text.split('\n');
+    let firstKeywordLine = -1;
 
-
-    for (const kw of mermaidKeywords) {
-      const idx = lowerText.indexOf(kw.toLowerCase());
-      if (idx !== -1 && (firstKeywordIndex === -1 || idx < firstKeywordIndex)) {
-        firstKeywordIndex = idx;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim().toLowerCase();
+      if (mermaidKeywords.some(kw => line.startsWith(kw.toLowerCase()))) {
+        firstKeywordLine = i;
+        break;
       }
     }
 
-
-    if (firstKeywordIndex !== -1) {
-      // Return everything from the first keyword onwards
-      return text.substring(firstKeywordIndex).trim();
+    if (firstKeywordLine !== -1) {
+      return lines.slice(firstKeywordLine).join('\n').trim();
     }
 
     // 3. Last resort fallback
@@ -313,25 +336,49 @@ const MermaidEditor = () => {
 
     // 1. Fix common mismatched node brackets [ ... } -> [ ... ]
     // These often appear when Llama tries to be creative with node shapes
-    sanitized = sanitized.replace(/\[([^\]]*?)\}/g, "[$1]"); // [ ... }
-    sanitized = sanitized.replace(/\{([^\}]*?)\]/g, "{$1}"); // { ... ]
+    sanitized = sanitized.replace(/\[([^\]]*?)}/g, "[$1]"); // [ ... }
+    sanitized = sanitized.replace(/{([^}]*?)]/g, "{$1}"); // { ... ]
     sanitized = sanitized.replace(/\(([^)]*?)\]/g, "($1)"); // ( ... ]
     sanitized = sanitized.replace(/\[([^\]]*?)\)/g, "[$1]"); // [ ... )
     
     // 2. Fix improperly closed double brackets ((...)) or {{...}}
     sanitized = sanitized.replace(/\(\(([^)]*?)\)/g, "(($1))");
-    sanitized = sanitized.replace(/\{\{([^\}]*?)\}/g, "{{$1}}");
+    sanitized = sanitized.replace(/{{([^}]*?)}/g, "{{$1}}");
 
     // 3. Fix unquoted labels with parentheses to prevent Mermaid parse errors
     // Ensures [factorial(n-1)] becomes ["factorial(n-1)"]
-    sanitized = sanitized.replace(/([\[\(\{]+)([^"\]\)\}]+[\(\)][^"\]\)\}]+)([\]\)\}]+)/g, '$1"$2"$3');
+    sanitized = sanitized.replace(/([[({]+)([^"\])}]+[(][^"\])}]+)([\])}]+)/g, '$1"$2"$3');
 
-    // 3. Ensure each line doesn't start with accidental markdown symbols
+    // 3. Ensure each line doesn't start with accidental markdown symbols or line numbers
     let lines = sanitized.split("\n").map(line => {
-      const trimmed = line.trim();
-      if (trimmed.startsWith("###") || trimmed.startsWith("**")) return "";
-      return line;
+      let cleaned = line.trim();
+      // Remove leading line numbers like "1. " or "1: "
+      cleaned = cleaned.replace(/^\d+[:.]\s*/, '');
+      if (cleaned.startsWith("###") || cleaned.startsWith("**")) return "";
+      return cleaned;
     }).filter(Boolean);
+
+    // 4. Fix Llama's non-standard edge syntax: id{text}|label|->target
+    // And handle chained versions: id1{text}|L1|->id2|L2|->id3
+    lines = lines.map(line => {
+      let cleanLine = line;
+      
+      // First, if we see id{...}|label|->target|label2|->target2, 
+      // we need to identify the source and split it.
+      const multiMatch = cleanLine.match(/^(\w+(?:\{[^}]+\}|\[[^\]]+\]|\([^)]+\)))\s*\|([^|]+)\|\s*->\s*(\w+)\s*\|([^|]+)\|\s*->\s*(\w+)/);
+      if (multiMatch) {
+        const [, source, label1, target1, label2, target2] = multiMatch;
+        return `${source} -->|${label1}| ${target1}\n${source.split(/[{[(]/)[0]} -->|${label2}| ${target2}`;
+      }
+
+      // Handle single: id{...}|label|->target
+      cleanLine = cleanLine.replace(/(\w+(?:\{[^}]+\}|\[[^\]]+\]|\([^)]+\)))\s*\|([^|]+)\|\s*->\s*(\w+)/g, '$1 -->|$2| $3');
+      
+      // Handle cases where the ID is already defined: id|label|->target
+      cleanLine = cleanLine.replace(/^(\w+)\s*\|([^|]+)\|\s*->\s*(\w+)/g, '$1 -->|$2| $3');
+
+      return cleanLine;
+    });
 
     // 4. Handle erDiagram hyphens and invalid keywords
     if (sanitized.toLowerCase().includes("erdiagram")) {
@@ -747,21 +794,31 @@ const MermaidEditor = () => {
         "Diagram generation"
       );
 
-      // API returns { success, data: { diagram, title }, message }
+      // API returns { success, data: { diagram, title, explanation }, message }
       if (response.data?.diagram) {
-        const fullResponse = response.data.diagram;
-        let extractedCode = extractMermaidCode(fullResponse);
-        extractedCode = sanitizeMermaidCode(extractedCode);
+        const diagramCode = response.data.diagram;
+        const aiTitle = response.data.title;
+        const aiExplanation = response.data.explanation;
         
-        setChat(fullResponse);
+        let chatResponse = aiTitle ? `# ${aiTitle}\n\n${aiExplanation || ""}` : aiExplanation || "";
+        
+        // Append the mermaid block so the DiagramPreview component in Markdown can render it
+        if (diagramCode) {
+          chatResponse += `\n\n\`\`\`mermaid\n${diagramCode}\n\`\`\``;
+        }
+        
+        let extractedCode = extractMermaidCode(diagramCode);
+        extractedCode = sanitizeMermaidCode(extractedCode || diagramCode);
+        
+        setChat(chatResponse);
         setCode(extractedCode);
         localStorage.setItem("mermaid_code", extractedCode);
         
         // Add AI response to conversation
-        addAssistantMessage(fullResponse);
+        addAssistantMessage(chatResponse);
 
-        if (response.data.title) {
-          setimageTitle(response.data.title);
+        if (aiTitle) {
+          setimageTitle(aiTitle);
         }
       } else {
         throw new Error("No diagram code was generated by the AI");
@@ -769,13 +826,13 @@ const MermaidEditor = () => {
       
       // Clear prompt after successful generation
       setPrompt("");
-    } catch (err: any) {
-      const errorMessage = err?.message || "Failed to generate diagram";
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to generate diagram";
       showError("api", errorMessage);
     } finally {
       setIsAIGeneratingDiagram(false);
     }
-  }, [prompt, model, diagramType, makeApiCall, setChat, addUserMessage, addAssistantMessage, showError, setPrompt]);
+  }, [prompt, model, diagramType, makeApiCall, setChat, addUserMessage, addAssistantMessage, showError, setPrompt, extractMermaidCode, sanitizeMermaidCode, setCode]);
 
   // Enhance diagram with error handling
   const enhanceTheDiagram = useCallback(async () => {
@@ -801,21 +858,31 @@ const MermaidEditor = () => {
         "Diagram enhancement"
       );
 
-      // API returns { success, data: { diagram, title }, message }
+      // API returns { success, data: { diagram, title, explanation }, message }
       if (response.data?.diagram) {
-        const fullResponse = response.data.diagram;
-        let extractedCode = extractMermaidCode(fullResponse);
-        extractedCode = sanitizeMermaidCode(extractedCode);
+        const diagramCode = response.data.diagram;
+        const aiTitle = response.data.title;
+        const aiExplanation = response.data.explanation;
+
+        let chatResponse = aiTitle ? `# ${aiTitle}\n\n${aiExplanation || ""}` : aiExplanation || "";
+
+        // Append the mermaid block so the DiagramPreview component in Markdown can render it
+        if (diagramCode) {
+          chatResponse += `\n\n\`\`\`mermaid\n${diagramCode}\n\`\`\``;
+        }
+
+        let extractedCode = extractMermaidCode(diagramCode);
+        extractedCode = sanitizeMermaidCode(extractedCode || diagramCode);
         
-        setChat(fullResponse);
+        setChat(chatResponse);
         setCode(extractedCode);
         localStorage.setItem("mermaid_code", extractedCode);
         
         // Add AI response to conversation
-        addAssistantMessage(fullResponse);
+        addAssistantMessage(chatResponse);
 
-        if (response.data.title) {
-          setimageTitle(response.data.title);
+        if (aiTitle) {
+          setimageTitle(aiTitle);
         }
       } else {
         throw new Error("No enhanced diagram was generated");
@@ -823,13 +890,13 @@ const MermaidEditor = () => {
       
       // Clear prompt after successful enhancement
       setPrompt("");
-    } catch (err: any) {
-      const errorMessage = err?.message || "Failed to enhance diagram";
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to enhance diagram";
       showError("api", errorMessage);
     } finally {
       setIsAIGeneratingDiagram(false);
     }
-  }, [prompt, code, chat, model, diagramType, makeApiCall, setChat, addUserMessage, addAssistantMessage, showError, setPrompt]);
+  }, [prompt, code, chat, model, diagramType, makeApiCall, setChat, addUserMessage, addAssistantMessage, showError, setPrompt, extractMermaidCode, sanitizeMermaidCode, setCode]);
 
   // Generate AI title with error handling
   const generateAItitleWithDiagrams = useCallback(async () => {
@@ -1136,9 +1203,22 @@ const MermaidEditor = () => {
         clearError={clearError}
       />
 
-      {/* Sidebar - Conditional Rendering (Sticky vs Hover) */}
-      {isSidebarSticky ? (
-        <div className="flex items-center z-[500] slide-in-left">
+      {/* Sidebar Container */}
+      <div className={`flex items-center h-full z-[2000] transition-all duration-300 ${isSidebarSticky ? 'relative' : 'fixed left-0 top-0 pointer-events-none'}`}>
+        {!isSidebarSticky && (
+          <div 
+            className={`absolute left-0 top-1/2 -translate-y-1/2 w-8 h-16 bg-bg-primary border border-l-0 border-border-primary rounded-r-xl flex items-center justify-center cursor-pointer pointer-events-auto transition-all duration-300 ${isSidebarHovered ? 'opacity-0 -translate-x-full' : 'opacity-100 translate-x-0'}`}
+            onMouseEnter={handleSidebarMouseEnter}
+          >
+            <ChevronRight size={16} className="text-text-primary animate-pulse" />
+          </div>
+        )}
+        
+        <div 
+          className={`h-fit transition-all duration-500 pointer-events-auto ${!isSidebarSticky ? (isSidebarHovered ? 'translate-x-4 opacity-100' : '-translate-x-full opacity-0') : 'translate-x-0 opacity-100'}`}
+          onMouseEnter={handleSidebarMouseEnter}
+          onMouseLeave={handleSidebarMouseLeave}
+        >
           <Sidebar
             isMovableEditorOpen={isMovableEditorOpen}
             setIsMovableEditorOpen={setIsMovableEditorOpen}
@@ -1153,25 +1233,7 @@ const MermaidEditor = () => {
             setIsSidebarSticky={setIsSidebarSticky}
           />
         </div>
-      ) : (
-        <div className="absolute left-0 top-0 h-full w-20 group z-[500] pointer-events-none">
-          <div className="absolute left-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-all duration-300 -translate-x-4 group-hover:translate-x-0 pointer-events-auto">
-            <Sidebar
-              isMovableEditorOpen={isMovableEditorOpen}
-              setIsMovableEditorOpen={setIsMovableEditorOpen}
-              isMovableExampleOpen={isMovableExampleOpen}
-              setIsMovableExampleOpen={setIsMovableExampleOpen}
-              isChatOpen={isChatOpen}
-              setIsChatOpen={setIsChatOpen}
-              isCanvasEditMode={isCanvasEditMode}
-              setIsCanvasEditMode={setIsCanvasEditMode}
-              setIsEmbedModalOpen={setIsEmbedModalOpen}
-              isSidebarSticky={isSidebarSticky}
-              setIsSidebarSticky={setIsSidebarSticky}
-            />
-          </div>
-        </div>
-      )}
+      </div>
 
       {/* Canvas */}
       <div 

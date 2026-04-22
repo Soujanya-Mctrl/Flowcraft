@@ -137,7 +137,7 @@ router.post(
     const { prompt, model, diagramType, conversationHistory } =
       req.body as GenerateDiagramRequest;
 
-    console.log("\n📝 Generating diagram...");
+    console.log(`\n📝 Generating diagram... Using model: ${model || "default (gemini-2.0-flash)"}`);
 
     const result = await aiService.generateDiagram(
       prompt,
@@ -149,6 +149,7 @@ router.post(
     const diagramId = uuidv4();
     const diagramData = {
       title: result.title,
+      explanation: result.explanation,
       code: result.diagram,
       prompt: prompt,
       model: model || "default",
@@ -174,6 +175,7 @@ router.post(
           id: diagramId,
           diagram: result.diagram,
           title: result.title,
+          explanation: result.explanation,
         },
         "Diagram generated and saved successfully"
       )
@@ -193,7 +195,7 @@ router.post(
     const { diagram, prompt, model, diagramType, conversationHistory } =
       req.body as EnhanceDiagramRequest;
 
-    console.log("\n🔧 Enhancing diagram...");
+    console.log(`\n🔧 Enhancing diagram... Using model: ${model || "default (gemini-2.0-flash)"}`);
 
     const result = await aiService.enhanceDiagram(
       diagram,
@@ -206,6 +208,7 @@ router.post(
     const diagramId = uuidv4();
     const diagramData = {
       title: result.title,
+      explanation: result.explanation,
       code: result.diagram,
       parentDiagram: diagram.substring(0, 50) + "...", 
       prompt: prompt,
@@ -232,6 +235,7 @@ router.post(
           id: diagramId,
           diagram: result.diagram,
           title: result.title,
+          explanation: result.explanation,
         },
         "Diagram enhanced and saved successfully"
       )

@@ -23,7 +23,7 @@ export class GoogleAIGenerator implements IAIGenerator {
     model: string,
     diagramType: string = "auto",
     conversationHistory?: ChatMessage[]
-  ): Promise<{ title: string; chat: string }> {
+  ): Promise<{ title: string; explanation: string; mermaid: string }> {
     try {
       const contextPrompt = conversationHistory
         ? prompt + buildConversationContext(conversationHistory)
@@ -57,15 +57,20 @@ export class GoogleAIGenerator implements IAIGenerator {
           systemInstruction: instructions_text_to_diagram + diagramTypeInstruction,
           responseMimeType: "application/json",
           responseSchema: {
-            title: Type.STRING,
-            chat: Type.STRING,
+            type: Type.OBJECT,
+            properties: {
+              title: { type: Type.STRING },
+              explanation: { type: Type.STRING },
+              mermaid: { type: Type.STRING },
+            },
+            required: ["title", "explanation", "mermaid"],
           },
         },
       });
 
-      let { title, chat } = parseJSON(response.text);
+      let { title, explanation, mermaid } = parseJSON(response.text);
 
-      if (!title || !chat) {
+      if (!title || !explanation || !mermaid) {
         throw new AppError(
           ErrorCode.AI_SERVICE_ERROR,
           "Failed to generate diagram: Invalid response from AI",
@@ -78,14 +83,14 @@ export class GoogleAIGenerator implements IAIGenerator {
       // Automated Validation & Rectification Loop
       // -----------------------------------------
       let retries = 0;
-      const MAX_RETRIES = 3;
+      const MAX_RETRIES = 2; // Reduced to save quota
       let valid = false;
 
       while (!valid && retries < MAX_RETRIES) {
         // Step 1: Check Syntax
         const checkResponse = await gemini.models.generateContent({
           model: "gemini-2.0-flash", // Using flash for fast validation
-          contents: `Code to check:\n\`\`\`mermaid\n${chat}\n\`\`\``,
+          contents: `Code to check:\n\`\`\`mermaid\n${mermaid}\n\`\`\``,
           config: {
             systemInstruction: JSON.stringify(instructions_diagram_checker)
           }
@@ -103,19 +108,23 @@ export class GoogleAIGenerator implements IAIGenerator {
         // Step 2: Rectify
         const rectifyResponse = await gemini.models.generateContent({
           model: "gemini-2.0-flash",
-          contents: `Original Code:\n\`\`\`mermaid\n${chat}\n\`\`\`\n\nErrors reported:\n${checkResult}`,
+          contents: `Original Code:\n\`\`\`mermaid\n${mermaid}\n\`\`\`\n\nErrors reported:\n${checkResult}`,
           config: {
             systemInstruction: JSON.stringify(instructions_diagram_rectifier),
             responseMimeType: "application/json",
             responseSchema: {
-              chat: Type.STRING
-            }
+              type: Type.OBJECT,
+              properties: {
+                mermaid: { type: Type.STRING },
+              },
+              required: ["mermaid"],
+            },
           }
         });
 
         const rectResult = parseJSON(rectifyResponse.text || "{}");
-        if (rectResult && rectResult.chat) {
-            chat = rectResult.chat;
+        if (rectResult && rectResult.mermaid) {
+            mermaid = rectResult.mermaid;
         }
         retries++;
       }
@@ -124,7 +133,7 @@ export class GoogleAIGenerator implements IAIGenerator {
          console.warn("[Gemini] Max validation retries reached. Returning best attempt.");
       }
 
-      return { title, chat };
+      return { title, explanation, mermaid: sanitizeMermaid(mermaid) };
     } catch (e: any) {
       console.error("Gemini generateDiagram error:", e);
       throw new AppError(
@@ -145,7 +154,7 @@ export class GoogleAIGenerator implements IAIGenerator {
     model: string,
     diagramType: string = "auto",
     conversationHistory?: ChatMessage[]
-  ): Promise<string> {
+  ): Promise<{ title: string; explanation: string; mermaid: string }> {
     try {
       const contextPrompt = conversationHistory
         ? prompt + buildConversationContext(conversationHistory)
@@ -177,12 +186,22 @@ export class GoogleAIGenerator implements IAIGenerator {
         contents: `Current diagram:\n\`\`\`mermaid\n${diagram}\n\`\`\`\n\nEnhancement request: ${contextPrompt}`,
         config: {
           systemInstruction: instructions_diagram_enhancer + diagramTypeInstruction,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              title: { type: Type.STRING },
+              explanation: { type: Type.STRING },
+              mermaid: { type: Type.STRING },
+            },
+            required: ["title", "explanation", "mermaid"],
+          }
         },
       });
 
-      let enhancedDiagram = response.text?.trim() || "";
+      let { title, explanation, mermaid } = parseJSON(response.text || "{}");
 
-      if (!enhancedDiagram) {
+      if (!mermaid) {
         throw new AppError(
           ErrorCode.AI_SERVICE_ERROR,
           "Failed to enhance diagram: Empty response from AI",
@@ -193,73 +212,65 @@ export class GoogleAIGenerator implements IAIGenerator {
       // -----------------------------------------
       // Automated Validation & Rectification Loop
       // -----------------------------------------
-      let matches = [...enhancedDiagram.matchAll(/```mermaid([\s\S]*?)```/g)];
-      
-      if (matches.length > 0) {
-        let lastMatch = matches[matches.length - 1]; // The newly enhanced diagram block
-        let chat = lastMatch[1].trim();
+      let retries = 0;
+      const MAX_RETRIES = 2; // Reduced to save quota
+      let valid = false;
 
-        let retries = 0;
-        const MAX_RETRIES = 3;
-        let valid = false;
-
-        while (!valid && retries < MAX_RETRIES) {
-          // Step 1: Check Syntax
-          const checkResponse = await gemini.models.generateContent({
-            model: "gemini-2.0-flash",
-            contents: `Code to check:\n\`\`\`mermaid\n${chat}\n\`\`\``,
-            config: {
-              systemInstruction: JSON.stringify(instructions_diagram_checker)
-            }
-          });
-          
-          const checkResult = checkResponse.text?.trim() || "VALID";
-          
-          if (checkResult === "VALID") {
-            valid = true;
-            break;
+      while (!valid && retries < MAX_RETRIES) {
+        // Step 1: Check Syntax
+        const checkResponse = await gemini.models.generateContent({
+          model: "gemini-2.0-flash",
+          contents: `Code to check:\n\`\`\`mermaid\n${mermaid}\n\`\`\``,
+          config: {
+            systemInstruction: JSON.stringify(instructions_diagram_checker)
           }
-
-          console.log(`[Gemini Enhance Validation Failed - Attempt ${retries + 1}] Errors: ${checkResult}`);
-
-          // Step 2: Rectify
-          const rectifyResponse = await gemini.models.generateContent({
-            model: "gemini-2.0-flash",
-            contents: `Original Code:\n\`\`\`mermaid\n${chat}\n\`\`\`\n\nErrors reported:\n${checkResult}`,
-            config: {
-              systemInstruction: JSON.stringify(instructions_diagram_rectifier),
-              responseMimeType: "application/json",
-              responseSchema: { chat: Type.STRING }
-            }
-          });
-
-          const rectResult = parseJSON(rectifyResponse.text || "{}");
-          if (rectResult && rectResult.chat) {
-              const newMermaidBlock = rectResult.chat;
-              enhancedDiagram = enhancedDiagram.replace(lastMatch[0], newMermaidBlock);
-              lastMatch[0] = newMermaidBlock;
-              
-              const innerMatch = /```mermaid([\s\S]*?)```/g.exec(newMermaidBlock);
-              chat = innerMatch ? innerMatch[1].trim() : newMermaidBlock.replace(/```mermaid\n|```/g, '').trim();
-          }
-          retries++;
+        });
+        
+        const checkResult = checkResponse.text?.trim() || "VALID";
+        
+        if (checkResult === "VALID") {
+          valid = true;
+          break;
         }
+
+        console.log(`[Gemini Enhance Validation Failed - Attempt ${retries + 1}] Errors: ${checkResult}`);
+
+        // Step 2: Rectify
+        const rectifyResponse = await gemini.models.generateContent({
+          model: "gemini-2.0-flash",
+          contents: `Original Code:\n\`\`\`mermaid\n${mermaid}\n\`\`\`\n\nErrors reported:\n${checkResult}`,
+          config: {
+            systemInstruction: JSON.stringify(instructions_diagram_rectifier),
+            responseMimeType: "application/json",
+            responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              mermaid: { type: Type.STRING },
+            },
+            required: ["mermaid"],
+          }
+          }
+        });
+
+        const rectResult = parseJSON(rectifyResponse.text || "{}");
+        if (rectResult && rectResult.mermaid) {
+            mermaid = rectResult.mermaid;
+        }
+        retries++;
       }
 
-      // Final deterministic sanitization for all mermaid blocks in the output
-      enhancedDiagram = enhancedDiagram.replace(/```mermaid([\s\S]*?)```/g, (match, code) => {
-        return `\`\`\`mermaid\n${sanitizeMermaid(code)}\n\`\`\``;
-      });
-
-      return enhancedDiagram;
+      return { title, explanation, mermaid: sanitizeMermaid(mermaid) };
     } catch (e: any) {
       console.error("Gemini enhanceDiagram error:", e);
-      throw new AppError(
-        ErrorCode.AI_SERVICE_ERROR,
-        e.message || "Failed to enhance diagram",
-        500,
-        e
-      );
+      // Check for rate limit
+      if (e.message?.includes("429") || e.status === 429) {
+        throw new AppError(
+          ErrorCode.AI_SERVICE_ERROR,
+          "Rate limit exceeded",
+          429,
+          e
+        );
+      }
     }
   }
 

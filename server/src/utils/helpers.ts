@@ -53,9 +53,9 @@ export const parseJSON = (str: string): any => {
 
     // AI models often over-escape newlines when outputting JSON containing markdown blocks
     // This safely unescapes literal '\\n' into actual newlines so Mermaid can parse it
-    if (result && typeof result.chat === 'string') {
-      result.chat = result.chat.replace(/\\n/g, '\n').replace(/\\r/g, '');
-      result.chat = sanitizeMermaid(result.chat);
+    if (result && typeof result.mermaid === 'string') {
+      result.mermaid = result.mermaid.replace(/\\n/g, '\n').replace(/\\r/g, '');
+      result.mermaid = sanitizeMermaid(result.mermaid);
     }
 
     return result;
@@ -140,9 +140,52 @@ export const sanitizeMermaid = (code: string): string => {
   // We look for id[Some(Text)] and turn it into id["Some(Text)"]
   sanitized = sanitized.replace(/(\w+)\s*\[\s*([^"\[\]\(\)\n]*\([^"\[\]\n]*\)[^"\[\]\(\)\n]*)\s*\]/g, '$1["$2"]');
   
-  // 4. Remove any loose backticks or markdown artifacts that might remain
-  // Occasionally AI outputs ```mermaid ... ``` inside the chat field instead of just the code.
-  // We already handle this in parsing, but this is a final cleanup for the code itself.
+  // 4. Fix single-quote labels: id['Text'] -> id["Text"]
+  sanitized = sanitized.replace(/(\b\w+\b\s*[\{\[\(]+)\s*'(.*?)'\s*([\}\]\)]+)/g, '$1"$2"$3');
+
+  // 5. Fix unquoted labels containing special characters like ==, ?, etc.
+  sanitized = sanitized.replace(/(\b\w+\b\s*\{)\s*([^"'{}\n]*[=<>?]+[^"'{}\n]*)\s*(\})/g, '$1"$2"$3');
+  sanitized = sanitized.replace(/(\b\w+\b\s*\[)\s*([^"'\[\]\n]*[=<>?]+[^"'\[\]\n]*)\s*(\])/g, '$1"$2"$3');
+
+  // 6. Fix nested double quotes: ["Say "Hi!""] -> ["Say 'Hi!'"]
+  // This is a common AI error that causes lexical errors.
+  sanitized = sanitized.replace(/\[\s*"(.*?)(\s*)(")(.*?)(")(.*?)?"\s*\]/g, (match, p1, p2, p3, p4, p5, p6) => {
+    return `["${p1}${p2}'${p4}'${p6 || ''}"]`;
+  });
+
+  // 7. Fix illegal characters in unquoted labels (e.g. & , ! inside id[...])
+  // We try to wrap them in quotes if they aren't already
+  sanitized = sanitized.replace(/(\b\w+\b\s*[\{\[\(]+)\s*([^"'{}\[\]\(\)\n]*[&\$!@#%^*+=|\\:;,.?<>~][^"'{}\[\]\(\)\n]*)\s*([\}\]\)]+)/g, (match, p1, p2, p3) => {
+    const trimmed = p2.trim();
+    if (trimmed.startsWith('"') && trimmed.endsWith('"')) return match;
+    return `${p1}"${trimmed}"${p3}`;
+  });
+
+  // 8. Remove common AI "conversational junk" that leaks into unquoted Mermaid blocks
+  // e.g. "Here is the flowchart:" or "This diagram illustrates..."
+  const mermaidKeywords = [
+    "graph TD", "graph LR", "graph ", "flowchart TD", "flowchart LR", "flowchart ",
+    "sequenceDiagram", "classDiagram", "stateDiagram-v2", "erDiagram", 
+    "gantt", "pie", "journey", "mindmap", "timeline", "gitGraph", "C4Context"
+  ];
+
+  // If the code doesn't start with a keyword, try to find the first keyword that IS at the start of a line
+  const lines = sanitized.split('\n');
+  let firstKeywordLine = -1;
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim().toLowerCase();
+    if (mermaidKeywords.some(kw => line.startsWith(kw.toLowerCase()))) {
+      firstKeywordLine = i;
+      break;
+    }
+  }
+
+  if (firstKeywordLine !== -1) {
+    sanitized = lines.slice(firstKeywordLine).join('\n');
+  }
+
+  // 9. Final cleanup of any loose backticks
   sanitized = sanitized.replace(/```mermaid\n?/g, '').replace(/```/g, '');
 
   return sanitized.trim();

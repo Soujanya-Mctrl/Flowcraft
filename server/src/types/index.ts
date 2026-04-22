@@ -60,7 +60,7 @@ export interface AIGenerator {
     model: string,
     diagramType?: string,
     conversationHistory?: ChatMessage[]
-  ): Promise<{ title: string; chat: string }>;
+  ): Promise<{ title: string; explanation: string; mermaid: string }>;
 
   enhanceDiagram(
     diagram: string,
@@ -68,7 +68,7 @@ export interface AIGenerator {
     model: string,
     diagramType?: string,
     conversationHistory?: ChatMessage[]
-  ): Promise<string>;
+  ): Promise<{ title: string; explanation: string; mermaid: string }>;
 
   generateTitle(diagram: string, model: string): Promise<string>;
 

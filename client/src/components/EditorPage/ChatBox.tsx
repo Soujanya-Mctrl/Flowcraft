@@ -1,6 +1,6 @@
 import { Sparkles, Trash2, ChevronDown, ChevronUp, Send } from "lucide-react";
 import Markdown from "./Markdown";
-import React, { useRef, useState, useEffect, useCallback } from "react";
+import React, { useRef, useState, useEffect, useCallback, useMemo } from "react";
 import { ChatMessage } from "../../types";
 
 interface ModelOption {
@@ -48,7 +48,6 @@ const ChatBox: React.FC<ChatBoxProps> = ({
   onGenerate,
   onEnhance,
   isChatOpen,
-  setIsChatOpen: _setIsChatOpen,
   models,
   diagramTypes,
   onClearChat,
@@ -58,6 +57,37 @@ const ChatBox: React.FC<ChatBoxProps> = ({
 }) => {
   const boxRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const renderedMessages = useMemo(() => messages.map((message, index) => {
+    const isLatestMessage = index === messages.length - 1;
+    const isAssistant = message.role === "assistant";
+    const isTyping = isLatestMessage && isAssistant && isAIGeneratingDiagram;
+    
+    const displayContent = typeof message.content === 'string' 
+      ? message.content 
+      : JSON.stringify(message.content, null, 2);
+
+    return (
+      <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
+        <div
+          className={`max-w-[90%] px-4 py-3 text-[14px] leading-relaxed rounded-xl ${
+            message.role === "user"
+              ? "bg-text-primary text-bg-primary shadow-sm"
+              : "bg-bg-primary text-text-primary border border-border-primary"
+          }`}
+        >
+          {message.role === "user" ? (
+            <p className="m-0 whitespace-pre-wrap">{displayContent}</p>
+          ) : (
+            <Markdown 
+              markdownString={displayContent} 
+              isTyping={isTyping} 
+            />
+          )}
+        </div>
+      </div>
+    );
+  }), [messages, isAIGeneratingDiagram]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
@@ -66,8 +96,38 @@ const ChatBox: React.FC<ChatBoxProps> = ({
   const [collapsed, setCollapsed] = useState(false);
 
 
+  // Optimized scrolling
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const scrollContainer = messagesEndRef.current?.parentElement;
+    if (!scrollContainer) return;
+
+    const scrollToBottom = () => {
+      requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+      });
+    };
+
+    // Observe content changes
+    const observer = new MutationObserver(() => {
+      const threshold = 150;
+      const isNearBottom = 
+        scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight < threshold;
+      
+      if (isNearBottom) {
+        scrollToBottom();
+      }
+    });
+
+    observer.observe(scrollContainer, {
+      childList: true,
+      subtree: true,
+      characterData: true
+    });
+
+    // Initial scroll
+    scrollToBottom();
+
+    return () => observer.disconnect();
   }, [messages]);
 
   const onMouseDown = (e: React.MouseEvent) => {
@@ -137,19 +197,29 @@ const ChatBox: React.FC<ChatBoxProps> = ({
         zIndex: zIndex,
       }}
       onMouseDown={() => onFocus?.()}
-      className={`border border-border-primary bg-bg-primary flex flex-col w-[450px] overflow-hidden rounded-container shadow-2xl shadow-black/10 transition-all duration-200 ${collapsed ? "h-auto" : "h-[650px]"}`}
+      className={`border border-border-primary bg-bg-primary flex flex-col overflow-hidden rounded-container shadow-2xl shadow-black/10 transition-shadow duration-200 ${
+        collapsed 
+          ? "!h-auto !w-[450px] resize-none" 
+          : "w-[450px] h-[650px] min-w-[320px] min-h-[400px] max-w-[80vw] max-h-[90vh] resize"
+      }`}
     >
       {/* Minimal Header */}
       <div
-        className="drag-handle cursor-move px-6 py-4 flex justify-between items-center bg-bg-primary border-b border-border-primary select-none"
+        className="drag-handle shrink-0 cursor-move px-6 py-4 flex justify-between items-center bg-bg-primary border-b border-border-primary select-none"
         onMouseDown={onMouseDown}
       >
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-container bg-bg-secondary flex items-center justify-center border border-border-primary">
-            <Sparkles size={14} className="text-text-primary" />
+          <div className="flex items-center gap-2.5">
+            <div className="relative">
+              <div className="w-9 h-9 rounded-xl bg-text-primary flex items-center justify-center shadow-lg shadow-text-primary/10">
+                <Sparkles size={16} className="text-bg-primary" />
+              </div>
+              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-accent-blue rounded-full border-2 border-bg-primary" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[14px] font-black uppercase tracking-widest text-text-primary leading-none">Architect</span>
+              <span className="text-[9px] font-bold text-text-muted uppercase tracking-tighter mt-1 opacity-70">Neural Diagram Engine</span>
+            </div>
           </div>
-          <span className="text-[15px] font-rounded font-medium text-text-primary">Architect</span>
-        </div>
         <div className="flex items-center gap-1">
           <button
             className="p-2 hover:bg-bg-secondary rounded-full transition-colors text-text-secondary hover:text-text-primary"
@@ -172,7 +242,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({
       {!collapsed && (
         <>
           {/* Generate / Enhance Tabs */}
-          <div className="flex p-1 bg-bg-secondary border-b border-border-primary gap-1">
+          <div className="flex shrink-0 p-1 bg-bg-primary border-b border-border-primary gap-1">
             <button
               onClick={() => setMode("conversation")}
               className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] transition-all rounded-pill ${
@@ -198,30 +268,17 @@ const ChatBox: React.FC<ChatBoxProps> = ({
             </button>
           </div>
 
-      <div className="flex-1 overflow-y-auto px-6 py-8 space-y-6 bg-bg-primary">
-        {messages.map((message) => (
-          <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div
-              className={`max-w-[90%] px-4 py-3 text-[14px] leading-relaxed rounded-container ${
-                message.role === "user"
-                  ? "bg-text-primary text-bg-primary"
-                  : "bg-bg-secondary text-text-primary border border-border-primary"
-              }`}
-            >
-              {message.role === "user" ? (
-                <p className="m-0 whitespace-pre-wrap">{message.content}</p>
-              ) : (
-                <Markdown markdownString={message.content} />
-              )}
-            </div>
-          </div>
-        ))}
+      <div 
+        className="flex-1 overflow-y-auto px-6 py-8 space-y-6 bg-bg-primary"
+        style={{ overflowAnchor: "auto" }}
+      >
+        {renderedMessages}
         <div ref={messagesEndRef} />
       </div>
 
       {/* Integrated Input Area */}
-      <div className="p-4 border-t border-border-primary bg-bg-primary">
-        <div className="relative border border-border-primary rounded-container bg-bg-primary focus-within:border-text-primary overflow-hidden group">
+      <div className="shrink-0 p-4 border-t border-border-primary bg-bg-primary">
+        <div className="relative border border-border-primary rounded-xl bg-bg-primary focus-within:border-black dark:focus-within:border-white overflow-hidden group flex flex-col">
           <textarea
             ref={textareaRef}
             value={prompt}
@@ -232,7 +289,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({
             className="w-full px-4 pt-3 pb-2 text-[14px] text-text-primary outline-none placeholder:text-text-muted resize-none bg-transparent"
           />
           
-          <div className="flex items-center justify-between px-2 py-1.5 bg-bg-secondary border-t border-border-primary">
+          <div className="flex shrink-0 items-center justify-between pl-2 pr-4 py-1.5 bg-bg-primary border-t border-border-primary">
             <div className="flex items-center gap-1 flex-1 min-w-0 pr-2">
 
               <div className="relative flex-shrink-0">
