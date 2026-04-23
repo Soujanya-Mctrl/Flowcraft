@@ -45,6 +45,7 @@ jobs:
             GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}
             FIREBASE_PROJECT_ID=${{ env.PROJECT_ID }}
             FIREBASE_SERVICE_ACCOUNT_JSON=${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+            ALLOWED_ORIGINS=https://${{ env.PROJECT_ID }}.web.app,https://${{ env.PROJECT_ID }}.firebaseapp.com
 
       # --- Client Deployment (Firebase Hosting) ---
       - name: Install Client Dependencies
@@ -54,6 +55,8 @@ jobs:
       - name: Build Client
         run: npm run build
         working-directory: ./client
+        env:
+          VITE_BACKEND_URL: https://flowcraft-api-329437257912.us-central1.run.app/api # Your Cloud Run URL
 
       - name: Deploy to Firebase Hosting
         uses: FirebaseExtended/action-hosting-deploy@v0
