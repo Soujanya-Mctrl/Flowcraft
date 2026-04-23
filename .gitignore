@@ -33,8 +33,11 @@ Thumbs.db
 *.swp
 *.swo
 
-# Firebase
+# Firebase & Secrets
 .firebase/
 firebase-debug.log*
 firestore-debug.log*
 ui-debug.log*
+firebase-service-account.json
+client/[0-9a-f][0-9a-f][0-9a-f]*
+*.json.local

@@ -44,6 +44,7 @@ jobs:
             GOOGLE_GEMINI_API_KEY=${{ secrets.GOOGLE_GEMINI_API_KEY }}
             GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}
             FIREBASE_PROJECT_ID=${{ env.PROJECT_ID }}
+            FIREBASE_SERVICE_ACCOUNT_JSON=${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
 
       # --- Client Deployment (Firebase Hosting) ---
       - name: Install Client Dependencies

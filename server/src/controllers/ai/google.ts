@@ -79,60 +79,6 @@ export class GoogleAIGenerator implements IAIGenerator {
       }
 
 
-      // -----------------------------------------
-      // Automated Validation & Rectification Loop
-      // -----------------------------------------
-      let retries = 0;
-      const MAX_RETRIES = 2; // Reduced to save quota
-      let valid = false;
-
-      while (!valid && retries < MAX_RETRIES) {
-        // Step 1: Check Syntax
-        const checkResponse = await gemini.models.generateContent({
-          model: "gemini-2.0-flash", // Using flash for fast validation
-          contents: `Code to check:\n\`\`\`mermaid\n${mermaid}\n\`\`\``,
-          config: {
-            systemInstruction: JSON.stringify(instructions_diagram_checker)
-          }
-        });
-        
-        const checkResult = checkResponse.text?.trim() || "VALID";
-        
-        if (checkResult === "VALID") {
-          valid = true;
-          break;
-        }
-
-        console.log(`[Gemini Validation Failed - Attempt ${retries + 1}] Errors: ${checkResult}`);
-
-        // Step 2: Rectify
-        const rectifyResponse = await gemini.models.generateContent({
-          model: "gemini-2.0-flash",
-          contents: `Original Code:\n\`\`\`mermaid\n${mermaid}\n\`\`\`\n\nErrors reported:\n${checkResult}`,
-          config: {
-            systemInstruction: JSON.stringify(instructions_diagram_rectifier),
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                mermaid: { type: Type.STRING },
-              },
-              required: ["mermaid"],
-            },
-          }
-        });
-
-        const rectResult = parseJSON(rectifyResponse.text || "{}");
-        if (rectResult && rectResult.mermaid) {
-            mermaid = rectResult.mermaid;
-        }
-        retries++;
-      }
-
-      if (!valid) {
-         console.warn("[Gemini] Max validation retries reached. Returning best attempt.");
-      }
-
       return { title, explanation, mermaid: sanitizeMermaid(mermaid) };
     } catch (e: any) {
       console.error("Gemini generateDiagram error:", e);
@@ -209,56 +155,6 @@ export class GoogleAIGenerator implements IAIGenerator {
         );
       }
 
-      // -----------------------------------------
-      // Automated Validation & Rectification Loop
-      // -----------------------------------------
-      let retries = 0;
-      const MAX_RETRIES = 2; // Reduced to save quota
-      let valid = false;
-
-      while (!valid && retries < MAX_RETRIES) {
-        // Step 1: Check Syntax
-        const checkResponse = await gemini.models.generateContent({
-          model: "gemini-2.0-flash",
-          contents: `Code to check:\n\`\`\`mermaid\n${mermaid}\n\`\`\``,
-          config: {
-            systemInstruction: JSON.stringify(instructions_diagram_checker)
-          }
-        });
-        
-        const checkResult = checkResponse.text?.trim() || "VALID";
-        
-        if (checkResult === "VALID") {
-          valid = true;
-          break;
-        }
-
-        console.log(`[Gemini Enhance Validation Failed - Attempt ${retries + 1}] Errors: ${checkResult}`);
-
-        // Step 2: Rectify
-        const rectifyResponse = await gemini.models.generateContent({
-          model: "gemini-2.0-flash",
-          contents: `Original Code:\n\`\`\`mermaid\n${mermaid}\n\`\`\`\n\nErrors reported:\n${checkResult}`,
-          config: {
-            systemInstruction: JSON.stringify(instructions_diagram_rectifier),
-            responseMimeType: "application/json",
-            responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              mermaid: { type: Type.STRING },
-            },
-            required: ["mermaid"],
-          }
-          }
-        });
-
-        const rectResult = parseJSON(rectifyResponse.text || "{}");
-        if (rectResult && rectResult.mermaid) {
-            mermaid = rectResult.mermaid;
-        }
-        retries++;
-      }
-
       return { title, explanation, mermaid: sanitizeMermaid(mermaid) };
     } catch (e: any) {
       console.error("Gemini enhanceDiagram error:", e);
@@ -317,7 +213,7 @@ export class GoogleAIGenerator implements IAIGenerator {
       const systemPrompt = instructions_prompt_enhancer;
 
       const response = await gemini.models.generateContent({
-        model: "gemini-2.0-flash",
+        model: "gemini-2.5-flash",
         contents: `Enhance this prompt for a ${diagramType === "auto" ? "diagram" : diagramType}: ${contextPrompt}`,
         config: {
           systemInstruction: systemPrompt,

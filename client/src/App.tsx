@@ -3,6 +3,7 @@ import "./App.css";
 import Redirect from "./pages/ShortURL_Redirect";
 import Landing from "./pages/Landing";
 import CreateDiagramPage from "./pages/Diagram/CreateDiagram";
+import ProfilePage from "./pages/Profile";
 import Navigation from "./components/Navigation";
 
 
@@ -17,6 +18,9 @@ function App() {
 
         {/* Diagram */}
         <Route path="diagram/create" element={<CreateDiagramPage />} />
+
+        {/* Profile */}
+        <Route path="profile" element={<ProfilePage />} />
 
         {/* Short URL Redirect */}
         <Route path="d/:id" element={<Redirect />} />

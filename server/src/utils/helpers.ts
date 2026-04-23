@@ -121,58 +121,45 @@ export const sanitizeMermaid = (code: string): string => {
   let sanitized = code;
 
   // 1. Fix common bracket/quote hallucinations in node definitions
-  // Surgical fix: match a valid opening/closing pair and then strip any extra trailing closing characters
-  // Fix id["Text"]] or id[Text]] -> id["Text"] or id[Text]
   sanitized = sanitized.replace(/(\b\w+\b\s*\[(?:".*?"|[^\]]+)\])\]+/g, '$1');
-  // Fix id{Text}} or id{"Text"}} -> id{Text} or id{"Text"}
   sanitized = sanitized.replace(/(\b\w+\b\s*\{(?:"[^"]*"|[^\}]+)\})\}+/g, '$1');
-  // Fix id(Text)) or id("Text")) -> id(Text) or id("Text")
   sanitized = sanitized.replace(/(\b\w+\b\s*\((?:"[^"]*"|[^\)]+)\)\))+/g, '$1');
-  // Fix id([Text])) or id(["Text"])) -> id([Text])
   sanitized = sanitized.replace(/(\b\w+\b\s*\(\[\s*(.*?)\s*\]\)\s*)\)+/g, '$1');
 
-  // 2. Fix arrow label hallucinations: --> |Label|> -> --> |Label|
-  // Also handle ==> and other arrow types
+  // 2. Fix arrow label hallucinations
   sanitized = sanitized.replace(/([-=]+>)\s*\|(.*?)\|\s*>\s*/g, '$1 |$2| ');
 
-  // 3. Fix labels containing parentheses that the AI forgot to quote properly
-  // This is a common failure. Mermaid breaks if it sees () inside unquoted labels.
-  // We look for id[Some(Text)] and turn it into id["Some(Text)"]
+  // 3. Fix unquoted labels containing parentheses
   sanitized = sanitized.replace(/(\w+)\s*\[\s*([^"\[\]\(\)\n]*\([^"\[\]\n]*\)[^"\[\]\(\)\n]*)\s*\]/g, '$1["$2"]');
   
-  // 4. Fix single-quote labels: id['Text'] -> id["Text"]
+  // 4. Fix single-quote labels
   sanitized = sanitized.replace(/(\b\w+\b\s*[\{\[\(]+)\s*'(.*?)'\s*([\}\]\)]+)/g, '$1"$2"$3');
 
-  // 5. Fix unquoted labels containing special characters like ==, ?, etc.
+  // 5. Fix unquoted labels containing special characters
   sanitized = sanitized.replace(/(\b\w+\b\s*\{)\s*([^"'{}\n]*[=<>?]+[^"'{}\n]*)\s*(\})/g, '$1"$2"$3');
   sanitized = sanitized.replace(/(\b\w+\b\s*\[)\s*([^"'\[\]\n]*[=<>?]+[^"'\[\]\n]*)\s*(\])/g, '$1"$2"$3');
 
-  // 6. Fix nested double quotes: ["Say "Hi!""] -> ["Say 'Hi!'"]
-  // This is a common AI error that causes lexical errors.
+  // 6. Fix nested double quotes
   sanitized = sanitized.replace(/\[\s*"(.*?)(\s*)(")(.*?)(")(.*?)?"\s*\]/g, (match, p1, p2, p3, p4, p5, p6) => {
     return `["${p1}${p2}'${p4}'${p6 || ''}"]`;
   });
 
-  // 7. Fix illegal characters in unquoted labels (e.g. & , ! inside id[...])
-  // We try to wrap them in quotes if they aren't already
+  // 7. Fix illegal characters in unquoted labels
   sanitized = sanitized.replace(/(\b\w+\b\s*[\{\[\(]+)\s*([^"'{}\[\]\(\)\n]*[&\$!@#%^*+=|\\:;,.?<>~][^"'{}\[\]\(\)\n]*)\s*([\}\]\)]+)/g, (match, p1, p2, p3) => {
     const trimmed = p2.trim();
     if (trimmed.startsWith('"') && trimmed.endsWith('"')) return match;
     return `${p1}"${trimmed}"${p3}`;
   });
 
-  // 8. Remove common AI "conversational junk" that leaks into unquoted Mermaid blocks
-  // e.g. "Here is the flowchart:" or "This diagram illustrates..."
+  // 8. Remove common AI "conversational junk"
   const mermaidKeywords = [
     "graph TD", "graph LR", "graph ", "flowchart TD", "flowchart LR", "flowchart ",
     "sequenceDiagram", "classDiagram", "stateDiagram-v2", "erDiagram", 
     "gantt", "pie", "journey", "mindmap", "timeline", "gitGraph", "C4Context"
   ];
 
-  // If the code doesn't start with a keyword, try to find the first keyword that IS at the start of a line
   const lines = sanitized.split('\n');
   let firstKeywordLine = -1;
-  
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim().toLowerCase();
     if (mermaidKeywords.some(kw => line.startsWith(kw.toLowerCase()))) {
@@ -180,13 +167,15 @@ export const sanitizeMermaid = (code: string): string => {
       break;
     }
   }
-
   if (firstKeywordLine !== -1) {
     sanitized = lines.slice(firstKeywordLine).join('\n');
   }
 
-  // 9. Final cleanup of any loose backticks
+  // 9. Cleanup backticks
   sanitized = sanitized.replace(/```mermaid\n?/g, '').replace(/```/g, '');
+
+  // 10. Fix concatenated keywords in sequence diagrams (e.g. "Responseelse", "Dataalt")
+  sanitized = sanitized.replace(/([^\s])(else|alt|opt|loop|rect|end)\b/g, '$1\n$2');
 
   return sanitized.trim();
 };

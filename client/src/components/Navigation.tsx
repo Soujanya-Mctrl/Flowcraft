@@ -7,6 +7,7 @@ import {
 } from "firebase/auth";
 import { useEffect, useState } from "react";
 import { auth } from "./auth/firebase.config";
+import { BACKEND_URL } from "../config";
 import {
   BookMarked,
   LayoutDashboard,
@@ -16,15 +17,22 @@ import {
   Moon,
   Sun,
 } from "lucide-react";
-import { useSetRecoilState } from "recoil";
-import { chatState } from "../store/atoms";
+import { useRecoilState, useRecoilValue, useSetRecoilState } from "recoil";
+import { chatState, sessionIdState, sessionTitleState } from "../store/atoms";
+import { useLocation } from "react-router-dom";
 
 const Navigation = () => {
   const [user, setUser] = useState<User | null>(null);
   const setChat = useSetRecoilState<string>(chatState);
+  const sessionId = useRecoilValue(sessionIdState);
+  const [sessionTitle, setSessionTitle] = useRecoilState(sessionTitleState);
   const [dropdown, setDropdown] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  const [isSavingTitle, setIsSavingTitle] = useState(false);
+  const location = useLocation();
+  const isCreatePage = location.pathname === "/diagram/create";
+
   const [isDark, setIsDark] = useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("theme") === "dark" ||
@@ -36,9 +44,27 @@ const Navigation = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((user: User | null) => {
+    const unsubscribe = auth.onAuthStateChanged(async (user: User | null) => {
       if (user) {
         setUser(user);
+        
+        // Sync user profile with backend
+        try {
+          const token = await user.getIdToken();
+          await fetch(`${BACKEND_URL}/user/sync`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              photoURL: user.photoURL
+            })
+          });
+        } catch (err) {
+          console.error("Failed to sync user profile:", err);
+        }
+
         setChat(
           `## Hello ${
             user.displayName?.split(" ")[0] || "User"
@@ -49,7 +75,7 @@ const Navigation = () => {
       }
     });
     return () => unsubscribe();
-  }, [user, setChat]);
+  }, [setChat]);
 
 
 
@@ -81,6 +107,34 @@ const Navigation = () => {
       console.log(err instanceof Error ? err.message : "SignOut Error");
     }
   };
+
+  // Debounced session title update
+  useEffect(() => {
+    if (!sessionId || !sessionTitle) return;
+    
+    const timeoutId = setTimeout(async () => {
+      try {
+        setIsSavingTitle(true);
+        const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json"
+        };
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+
+        await fetch(`${BACKEND_URL}/session/${sessionId}`, {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ title: sessionTitle })
+        });
+      } catch (err) {
+        console.error("Failed to update session title:", err);
+      } finally {
+        setTimeout(() => setIsSavingTitle(false), 1000);
+      }
+    }, 1000);
+
+    return () => clearTimeout(timeoutId);
+  }, [sessionTitle, sessionId]);
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -149,6 +203,24 @@ const Navigation = () => {
           <span className="text-[18px] font-rounded font-medium tracking-tight">Flowcraft</span>
         </div>
 
+        {isCreatePage && sessionId && (
+          <div className="flex-1 max-w-md mx-8 group/title relative">
+            <input
+              type="text"
+              value={sessionTitle}
+              onChange={(e) => setSessionTitle(e.target.value)}
+              className="w-full bg-transparent border-none focus:ring-0 text-[14px] font-medium text-text-primary placeholder:text-text-muted px-0 py-1 transition-all"
+              placeholder="Untitled Canvas"
+            />
+            <div className="absolute bottom-0 left-0 h-[1px] bg-border-primary w-0 group-focus-within/title:w-full transition-all duration-300" />
+            {isSavingTitle && (
+              <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-2 text-[10px] text-text-muted uppercase tracking-widest animate-pulse">
+                <span>Saving</span>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex items-center gap-8">
           <Link
             to="/diagram/create"
@@ -188,13 +260,31 @@ const Navigation = () => {
                   </div>
                   
                   <div className="space-y-1">
-                    <button className="w-full text-left px-3 py-2 rounded-md hover:bg-black/5 dark:hover:bg-white/5 transition-colors flex items-center gap-3 text-[14px]">
+                    <button 
+                      className="w-full text-left px-3 py-2 rounded-md hover:bg-black/5 dark:hover:bg-white/5 transition-colors flex items-center gap-3 text-[14px]"
+                      onClick={() => {
+                        setDropdown(false);
+                        navigate("/profile");
+                      }}
+                    >
                       <LayoutDashboard size={16} /> Dashboard
                     </button>
-                    <button className="w-full text-left px-3 py-2 rounded-md hover:bg-black/5 dark:hover:bg-white/5 transition-colors flex items-center gap-3 text-[14px]">
+                    <button 
+                      className="w-full text-left px-3 py-2 rounded-md hover:bg-black/5 dark:hover:bg-white/5 transition-colors flex items-center gap-3 text-[14px]"
+                      onClick={() => {
+                        setDropdown(false);
+                        navigate("/profile");
+                      }}
+                    >
                       <BookMarked size={16} /> My Diagrams
                     </button>
-                    <button className="w-full text-left px-3 py-2 rounded-md hover:bg-black/5 dark:hover:bg-white/5 transition-colors flex items-center gap-3 text-[14px]">
+                    <button 
+                      className="w-full text-left px-3 py-2 rounded-md hover:bg-black/5 dark:hover:bg-white/5 transition-colors flex items-center gap-3 text-[14px]"
+                      onClick={() => {
+                        setDropdown(false);
+                        navigate("/profile");
+                      }}
+                    >
                       <UserCog size={16} /> Settings
                     </button>
                     <button 

@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
+import { auth } from "../../components/auth/firebase.config";
 
 import mermaid from "mermaid";
 import Panzoom from "@panzoom/panzoom";
@@ -15,13 +17,14 @@ import { default_code } from "./default_mermaid_code";
 import { v4 as uuidv4 } from "uuid";
 import { BACKEND_URL } from "../../config";
 import { useRecoilState } from "recoil";
-import { chatState, codeState, conversationHistoryState, DEFAULT_WELCOME_MESSAGE } from "../../store/atoms";
+import { chatState, codeState, conversationHistoryState, sessionIdState, sessionTitleState, DEFAULT_WELCOME_MESSAGE } from "../../store/atoms";
 import { ChatMessage } from "../../types";
 import Sidebar from "../../components/EditorPage/SideBar";
 import ErrorNotification from "../../components/EditorPage/ErrorNotification";
 import ChatBox from "../../components/EditorPage/ChatBox";
 import MovableCodeEditor from "../../components/EditorPage/MovableCodeEditor";
 import MovableExampleSection from "../../components/EditorPage/MovableExampleSection";
+import HistorySidebar from "../../components/EditorPage/HistorySidebar";
 
 // Types for better type safety
 interface ApiResponse {
@@ -63,15 +66,66 @@ const MermaidEditor = () => {
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState<string[]>([default_code]);
   const [redoStack, setRedoStack] = useState<string[]>([]);
-  const [imageTitle, setimageTitle] = useState("Flowcraft_" + uuidv4());
+  const [sessionId, setSessionId] = useRecoilState(sessionIdState);
+  const [sessionTitle, setSessionTitle] = useRecoilState(sessionTitleState);
   const [isDark, setIsDark] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [model, setModel] = useState(() => {
-    return localStorage.getItem("selected_model") || "llama-3.3-70b-versatile";
+    return localStorage.getItem("selected_model") || "gemini-2.5-flash-lite";
   });
+
+  // Claim logic on auth change
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged(async (user) => {
+      if (user && sessionId) {
+        // Try to claim the current session
+        try {
+          const token = await user.getIdToken();
+          await fetch(`${BACKEND_URL}/session/${sessionId}/claim`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          });
+        } catch (err) {
+          console.error("Failed to claim session:", err);
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, [sessionId]);
+
   const [diagramType, setDiagramType] = useState(() => {
     return localStorage.getItem("selected_diagram_type") || "auto";
   });
+
+  // Debounced session content update (Auto-save)
+  useEffect(() => {
+    if (!sessionId) return;
+    
+    const timeoutId = setTimeout(async () => {
+      try {
+        const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json"
+        };
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+
+        await fetch(`${BACKEND_URL}/session/${sessionId}`, {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ 
+            last_diagram_code: code,
+            messages: conversationHistory
+          })
+        });
+      } catch (err) {
+        console.error("Failed to auto-save session content:", err);
+      }
+    }, 2000);
+
+    return () => clearTimeout(timeoutId);
+  }, [code, conversationHistory, sessionId]);
   const [isCanvasEditMode, setIsCanvasEditMode] = useState(false);
   interface SelectedElement {
     element: HTMLElement;
@@ -93,6 +147,7 @@ const MermaidEditor = () => {
   const [isMovableExampleOpen, setIsMovableExampleOpen] = useState(true);
 
   // Loading states
+
   const [isDownloading, setIsDownloading] = useState(false);
   const [isAIGeneratingDiagram, setIsAIGeneratingDiagram] = useState(false);
   const [isAIGeneratingTitle, setIsAIGeneratingTitle] = useState(false);
@@ -101,6 +156,9 @@ const MermaidEditor = () => {
     return stored === null ? true : stored === "true";
   });
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
+  const [isHistorySidebarOpen, setIsHistorySidebarOpen] = useState(() => {
+    return localStorage.getItem("history_sidebar_open") === "true";
+  });
   const sidebarHoverTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const handleSidebarMouseEnter = () => {
@@ -160,14 +218,24 @@ const MermaidEditor = () => {
 
   const models: Model[] = [
     {
-      name: "Llama 3.3 [70B]",
-      description: "Powerful & Logical",
-      model: "llama-3.3-70b-versatile",
+      name: "Gemini 2.5 Flash Lite",
+      description: "Fastest & Free Tier Optimized",
+      model: "gemini-2.5-flash-lite",
+    },
+    {
+      name: "Gemini 2.5 Flash",
+      description: "Balanced Reasoning",
+      model: "gemini-2.5-flash",
     },
     {
       name: "Gemini 2.0 Flash",
-      description: "Fast & Precise",
+      description: "Legacy Support",
       model: "gemini-2.0-flash",
+    },
+    {
+      name: "Llama 3.3 [70B]",
+      description: "Powerful & Logical",
+      model: "llama-3.3-70b-versatile",
     },
     {
       name: "Llama 3.1 [8B]",
@@ -283,7 +351,90 @@ const MermaidEditor = () => {
 
   const clearConversationHistory = useCallback(() => {
     setConversationHistory([DEFAULT_WELCOME_MESSAGE]);
-  }, [setConversationHistory]);
+    setChat(DEFAULT_WELCOME_MESSAGE.content);
+    setCode(default_code);
+    setSessionId(null);
+    localStorage.removeItem("current_session_id");
+  }, [setConversationHistory, setChat, setCode]);
+
+  const handleNewCanvas = useCallback(async () => {
+    clearConversationHistory();
+    setSessionTitle("New Canvas");
+    
+    // Always create a new session on backend (supports anonymous & logged in)
+    try {
+      const user = auth.currentUser;
+      const token = user ? await user.getIdToken() : null;
+      
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json"
+      };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const response = await fetch(`${BACKEND_URL}/sessions`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ title: "New Canvas" })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSessionId(data.data.id);
+        localStorage.setItem("current_session_id", data.data.id);
+      }
+    } catch (err) {
+      console.error("Failed to create new session:", err);
+    }
+  }, [clearConversationHistory, setSessionId, setSessionTitle]);
+
+  const handleSelectSession = useCallback(async (id: string) => {
+    try {
+      setLoading(true);
+      const token = await auth.currentUser?.getIdToken();
+      const response = await fetch(`${BACKEND_URL}/session/${id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      const data = await response.json();
+      if (data.success) {
+        const session = data.data;
+        setSessionId(session.id);
+        setSessionTitle(session.title || "New Canvas");
+        localStorage.setItem("current_session_id", session.id);
+        
+        // Restore state
+        if (session.messages && session.messages.length > 0) {
+          setConversationHistory(session.messages.map((m: any) => ({
+            ...m,
+            timestamp: m.timestamp?._seconds ? new Date(m.timestamp._seconds * 1000) : new Date(m.timestamp)
+          })));
+          
+          // Set last message as chat content
+          const lastAssistant = [...session.messages].reverse().find(m => m.role === "assistant");
+          if (lastAssistant) {
+            setChat(lastAssistant.content);
+          }
+        } else {
+          setConversationHistory([DEFAULT_WELCOME_MESSAGE]);
+          setChat(DEFAULT_WELCOME_MESSAGE.content);
+        }
+        
+        if (session.last_diagram_code) {
+          setCode(session.last_diagram_code);
+        }
+        setSessionTitle(session.title || "New Canvas");
+      }
+    } catch (err) {
+      console.error("Failed to load session:", err);
+      showError("api", "Failed to load session history");
+    } finally {
+      setLoading(false);
+    }
+  }, [setSessionId, setSessionTitle, setConversationHistory, setChat, setCode, showError]);
+
+  useEffect(() => {
+    localStorage.setItem("history_sidebar_open", isHistorySidebarOpen.toString());
+  }, [isHistorySidebarOpen]);
 
   /**
    * Extracts Mermaid code from a markdown string.
@@ -335,19 +486,32 @@ const MermaidEditor = () => {
     let sanitized = code;
 
     // 1. Fix common mismatched node brackets [ ... } -> [ ... ]
-    // These often appear when Llama tries to be creative with node shapes
-    sanitized = sanitized.replace(/\[([^\]]*?)}/g, "[$1]"); // [ ... }
-    sanitized = sanitized.replace(/{([^}]*?)]/g, "{$1}"); // { ... ]
-    sanitized = sanitized.replace(/\(([^)]*?)\]/g, "($1)"); // ( ... ]
-    sanitized = sanitized.replace(/\[([^\]]*?)\)/g, "[$1]"); // [ ... )
+    sanitized = sanitized.replace(/\[([^\]]*?)[}\)]+/g, "[$1]"); // [ ... } or [ ... )
+    sanitized = sanitized.replace(/\{([^}]*?)[\]\)]+/g, "{$1}"); // { ... ] or { ... )
+    sanitized = sanitized.replace(/\(([^)]*?)[\]}]+/g, "($1)"); // ( ... ] or ( ... }
     
-    // 2. Fix improperly closed double brackets ((...)) or {{...}}
-    sanitized = sanitized.replace(/\(\(([^)]*?)\)/g, "(($1))");
-    sanitized = sanitized.replace(/{{([^}]*?)}/g, "{{$1}}");
-
-    // 3. Fix unquoted labels with parentheses to prevent Mermaid parse errors
+    // 2. Fix unquoted labels with parentheses to prevent Mermaid parse errors
     // Ensures [factorial(n-1)] becomes ["factorial(n-1)"]
+    // We do this BEFORE symmetry fixes to protect the contents
     sanitized = sanitized.replace(/([[({]+)([^"\])}]+[(][^"\])}]+)([\])}]+)/g, '$1"$2"$3');
+
+    // 3. Fix improperly closed multi-brackets (Ensures symmetry)
+    // We target the node shape boundaries specifically
+    // Handle triple: (((text)))
+    sanitized = sanitized.replace(/(\w+)\(\(\(([^)]*?)\)+/g, '$1((($2)))');
+    sanitized = sanitized.replace(/(\w+)\s+\(\(\(([^)]*?)\)+/g, '$1 ((($2)))');
+    
+    // Handle double: ((text))
+    sanitized = sanitized.replace(/(\w+)\(\(([^)]*?)\)+/g, '$1(($2))');
+    sanitized = sanitized.replace(/(\w+)\s+\(\(([^)]*?)\)+/g, '$1 (($2))');
+
+    // Handle mismatched edge cases specifically like ((Start)))
+    sanitized = sanitized.replace(/\(\(([^)]*?)\)\)\)/g, '((($1)))');
+    sanitized = sanitized.replace(/\(\(\(([^)]*?)\)\)/g, '((($1)))');
+
+    sanitized = sanitized.replace(/(\w+)\{\{\{([^}]*?)\}+/g, '$1{{{$2}}}'); // {{{ ... }}}
+    sanitized = sanitized.replace(/(\w+)\{\{([^}]*?)\}+/g, '$1{{$2}}');     // {{ ... }}
+    sanitized = sanitized.replace(/(\w+)\[\[([^\]]*?)\]+/g, '$1[[$2]]');   // [[ ... ]]
 
     // 3. Ensure each line doesn't start with accidental markdown symbols or line numbers
     let lines = sanitized.split("\n").map(line => {
@@ -594,19 +758,86 @@ const MermaidEditor = () => {
     };
   }, [code, renderDiagram]);
 
-  // Load saved data from localStorage
+  const [searchParams] = useSearchParams();
+
+  // Load saved data from localStorage and initialize session
   useEffect(() => {
-    try {
-      const savedCode = localStorage.getItem("mermaid_code");
-      if (savedCode) {
-        setCode(savedCode);
-        setHistory([savedCode]);
+    const initializeSession = async () => {
+      try {
+        const urlSessionId = searchParams.get("id");
+        const storedSessionId = urlSessionId || localStorage.getItem("current_session_id");
+        
+        if (storedSessionId) {
+          // If we have a session ID, try to fetch its data from the server
+          setSessionId(storedSessionId);
+          
+          try {
+            const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+            const headers: any = {};
+            if (token) headers["Authorization"] = `Bearer ${token}`;
+            
+            const response = await fetch(`${BACKEND_URL}/session/${storedSessionId}`, { headers });
+            const data = await response.json();
+            
+            if (data.success && data.data) {
+              // Restore diagram code
+              if (data.data.last_diagram_code) {
+                setCode(data.data.last_diagram_code);
+                setHistory([data.data.last_diagram_code]);
+              }
+              
+              // Restore conversation history
+              if (data.data.messages && data.data.messages.length > 0) {
+                // Ensure messages have the right format
+                const formattedMessages = data.data.messages.map((m: any) => ({
+                  ...m,
+                  timestamp: m.timestamp?._seconds ? new Date(m.timestamp._seconds * 1000) : new Date(m.timestamp)
+                }));
+                setConversationHistory(formattedMessages);
+              }
+              
+              // Restore title if exists
+              if (data.data.title && data.data.title !== "New Canvas") {
+                setSessionTitle(data.data.title);
+              } else {
+                setSessionTitle("New Canvas");
+              }
+
+              // Restore other settings
+              if (data.data.diagramType) {
+                setDiagramType(data.data.diagramType);
+                localStorage.setItem("selected_diagram_type", data.data.diagramType);
+              }
+              if (data.data.model) {
+                setModel(data.data.model);
+                localStorage.setItem("selected_model", data.data.model);
+              }
+              
+              return; // Successfully restored from cloud
+            }
+          } catch (fetchErr) {
+            console.warn("Failed to fetch session from cloud, falling back to local storage:", fetchErr);
+          }
+        }
+
+        // Fallback: Check local storage for code
+        const savedCode = localStorage.getItem("mermaid_code");
+        if (savedCode) {
+          setCode(savedCode);
+          setHistory([savedCode]);
+        }
+
+        // If no session ID or cloud fetch failed, create new canvas
+        if (!storedSessionId && !sessionId) {
+          handleNewCanvas();
+        }
+      } catch (err) {
+        console.warn("Session initialization error:", err);
       }
-    } catch (err) {
-      console.warn("Failed to load saved data:", err);
-      showError("render", "Failed to load saved data");
-    }
-  }, [setCode, setChat, showError]);
+    };
+
+    initializeSession();
+  }, [setCode, setConversationHistory, setSessionId, setDiagramType, setModel, setHistory]);
 
   // Copy to clipboard with error handling
   const copyToClipboard = useCallback(async () => {
@@ -715,7 +946,7 @@ const MermaidEditor = () => {
 
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${imageTitle || "diagram"}.svg`;
+      a.download = `${sessionTitle || "diagram"}.svg`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -728,7 +959,7 @@ const MermaidEditor = () => {
     } finally {
       setTimeout(() => setIsDownloading(false), 1000);
     }
-  }, [imageTitle, showError]);
+  }, [sessionTitle, showError]);
 
   // API call wrapper with proper error handling
   const makeApiCall = useCallback(
@@ -742,12 +973,24 @@ const MermaidEditor = () => {
           throw new Error("Backend URL is not configured");
         }
 
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+
+        // Add Auth token if user is logged in
+        const user = auth.currentUser;
+        if (user) {
+          const token = await user.getIdToken();
+          headers["Authorization"] = `Bearer ${token}`;
+        }
+
         const response = await fetch(`${BACKEND_URL}${endpoint}`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(body),
+          headers,
+          body: JSON.stringify({
+            ...body,
+            sessionId: sessionId || undefined // Pass sessionId if available
+          }),
         });
 
         if (!response.ok) {
@@ -818,7 +1061,7 @@ const MermaidEditor = () => {
         addAssistantMessage(chatResponse);
 
         if (aiTitle) {
-          setimageTitle(aiTitle);
+          setSessionTitle(aiTitle);
         }
       } else {
         throw new Error("No diagram code was generated by the AI");
@@ -832,7 +1075,7 @@ const MermaidEditor = () => {
     } finally {
       setIsAIGeneratingDiagram(false);
     }
-  }, [prompt, model, diagramType, makeApiCall, setChat, addUserMessage, addAssistantMessage, showError, setPrompt, extractMermaidCode, sanitizeMermaidCode, setCode]);
+  }, [prompt, model, diagramType, makeApiCall, setChat, addUserMessage, addAssistantMessage, showError, setPrompt, extractMermaidCode, sanitizeMermaidCode, setCode, setSessionTitle]);
 
   // Enhance diagram with error handling
   const enhanceTheDiagram = useCallback(async () => {
@@ -882,7 +1125,7 @@ const MermaidEditor = () => {
         addAssistantMessage(chatResponse);
 
         if (aiTitle) {
-          setimageTitle(aiTitle);
+          setSessionTitle(aiTitle);
         }
       } else {
         throw new Error("No enhanced diagram was generated");
@@ -896,7 +1139,7 @@ const MermaidEditor = () => {
     } finally {
       setIsAIGeneratingDiagram(false);
     }
-  }, [prompt, code, chat, model, diagramType, makeApiCall, setChat, addUserMessage, addAssistantMessage, showError, setPrompt, extractMermaidCode, sanitizeMermaidCode, setCode]);
+  }, [prompt, code, chat, model, diagramType, makeApiCall, setChat, addUserMessage, addAssistantMessage, showError, setPrompt, extractMermaidCode, sanitizeMermaidCode, setCode, setSessionTitle]);
 
   // Generate AI title with error handling
   const generateAItitleWithDiagrams = useCallback(async () => {
@@ -916,7 +1159,7 @@ const MermaidEditor = () => {
 
       // API returns { success, data: { title }, message }
       if (response.data?.title) {
-        setimageTitle(response.data.title);
+        setSessionTitle(response.data.title);
       } else {
         throw new Error("No title was generated");
       }
@@ -1112,12 +1355,12 @@ const MermaidEditor = () => {
 
       switch (embedType) {
         case "markdown":
-          generatedCode = `# ${imageTitle || "Diagram"}
+          generatedCode = `# ${sessionTitle || "Diagram"}
   
   ${embedDescription ? `${embedDescription}\n\n` : ""}
   
   ![${
-    imageTitle || "Diagram"
+    sessionTitle || "Diagram"
   }](data:image/svg+xml;charset=utf-8,${encodeURIComponent(brandedSvgContent)})
   
   ---
@@ -1127,7 +1370,7 @@ const MermaidEditor = () => {
         case "html":
           generatedCode = `<!-- Embeddable HTML -->
   <div class="diagram-embed" style="text-align: center; margin: 20px 0;">
-    ${imageTitle ? `<h3>${imageTitle}</h3>` : ""}
+    ${sessionTitle ? `<h3>${sessionTitle}</h3>` : ""}
     ${embedDescription ? `<p>${embedDescription}</p>` : ""}
     <div style="display: inline-block; border: 1px solid #ddd; padding: 10px; border-radius: 8px;">
       ${brandedSvgContent}
@@ -1152,7 +1395,7 @@ const MermaidEditor = () => {
         err instanceof Error ? err.message : "Failed to generate embed code";
       showError("api", errorMessage);
     }
-  }, [embedType, imageTitle, embedDescription, showError, addBrandingToSVG]);
+  }, [embedType, sessionTitle, embedDescription, showError, addBrandingToSVG]);
 
   // function to generate embed code when type or title changes
   const copyEmbedToClipboard = useCallback(async () => {
@@ -1201,6 +1444,14 @@ const MermaidEditor = () => {
       <ErrorNotification
         error={{ ...error, type: error.type || "" }}
         clearError={clearError}
+      />
+
+      <HistorySidebar 
+        isOpen={isHistorySidebarOpen}
+        setIsOpen={setIsHistorySidebarOpen}
+        onSelectSession={handleSelectSession}
+        onNewCanvas={handleNewCanvas}
+        currentSessionId={sessionId}
       />
 
       {/* Sidebar Container */}
@@ -1357,9 +1608,9 @@ const MermaidEditor = () => {
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    value={imageTitle}
+                    value={sessionTitle}
                     className="input-apple flex-1 py-2"
-                    onChange={(e) => setimageTitle(e.target.value)}
+                    onChange={(e) => setSessionTitle(e.target.value)}
                     placeholder="Enter title"
                   />
                   <button
@@ -1483,8 +1734,8 @@ const MermaidEditor = () => {
                     <div className="flex gap-2">
                       <input
                         type="text"
-                        value={imageTitle}
-                        onChange={(e) => setimageTitle(e.target.value)}
+                        value={sessionTitle}
+                        onChange={(e) => setSessionTitle(e.target.value)}
                         className="input-apple flex-1"
                         placeholder="Blueprint name"
                       />

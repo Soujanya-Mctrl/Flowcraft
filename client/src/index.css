@@ -11,6 +11,7 @@
     --text-muted: #a3a3a3;
     --border-primary: #e5e5e5;
     --border-secondary: #d4d4d4;
+    --accent-primary: #000000;
     --accent-blue: #3b82f6; /* Only for focus rings */
     
     font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -28,6 +29,7 @@
     --text-muted: #737373;
     --border-primary: #262626;
     --border-secondary: #404040;
+    --accent-primary: #ffffff;
     color: var(--text-primary);
     background-color: var(--bg-primary);
   }
@@ -107,6 +109,15 @@
   /* Legacy Aliases */
   .rounded-apple { border-radius: 9999px; }
   .apple-card { border-radius: 12px; border: 1px solid var(--border-primary); }
+
+  .glass-card {
+    background-color: var(--bg-primary);
+    @apply backdrop-blur-xl bg-opacity-80 dark:bg-opacity-50;
+    border: 1px solid var(--border-primary);
+  }
+
+  .text-accent-primary { color: var(--accent-primary); }
+  .bg-accent-primary { background-color: var(--accent-primary); }
 }
 
 /* Typography per DESIGN.md */

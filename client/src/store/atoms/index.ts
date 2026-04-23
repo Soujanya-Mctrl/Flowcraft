@@ -49,4 +49,14 @@ export const conversationHistoryState = atom<ChatMessage[]>({
   default: [DEFAULT_WELCOME_MESSAGE],
 });
 
+export const sessionIdState = atom<string | null>({
+  key: "sessionIdState",
+  default: localStorage.getItem("current_session_id"),
+});
+
+export const sessionTitleState = atom<string>({
+  key: "sessionTitleState",
+  default: "New Canvas",
+});
+
 export { DEFAULT_WELCOME_MESSAGE };

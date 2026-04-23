@@ -50,9 +50,11 @@ export const instructions_text_to_diagram = JSON.stringify(
       "CRITICAL - Parentheses: If a label contains '(' or ')', it MUST be wrapped in double quotes. Never leave parentheses unquoted.",
       "Flowcharts: Edge labels MUST use the syntax 'source -->|label| target' or 'source -- label --> target'. NEVER use the shorthand 'source|label|->target' as it is invalid and will cause parse errors. Each arrow must be explicitly defined with '--' or '-->'.",
       "Sequence Diagrams: Use proper participant declarations. Labels on arrows MUST be concise. NEVER include spaces in participant names (use User_Interface or UI, NOT User Interface).",
+      "Sequence Diagram Blocks: Keywords like 'alt', 'else', 'opt', 'loop', and 'end' MUST be on their own line. NEVER append them to the previous line. Example: 'Client->>Server: Request' followed by a NEWLINE, then 'alt Success'.",
       "Class Diagrams: Use 'class className { ... }' blocks. Avoid the 'class' keyword if just defining relationships unless a block follows.",
-      "Bracket Matching: Node boundaries MUST strictly match (e.g., id[Text], id[\"Text\"]). Look closely for typos like id[\"Text\"]] or id(Text].",
+      "Bracket Matching: Node boundaries MUST strictly match in type AND count (e.g., id[Text] is correct, id(Text] is WRONG; id((Text)) is correct, id((Text))) is WRONG). Always double-check that you have the same number of opening and closing brackets for node shapes.",
       "CRITICAL - Decision Nodes: Question marks in labels (e.g., \"Is it true?\") MUST ALWAYS be wrapped in double quotes and use valid bracket shapes like id{\"Label?\"} or id{\"Label?\"} -->|Yes| target.",
+      "CRITICAL - Node Shapes: Use only standard shapes: [ ] for rectangle, [[ ]] for subroutine, ( ) for rounded, (( )) for circle, ((( ))) for double circle, { } for diamond, > ] for asymmetric, [/ /] for parallelogram, [\ \ ] for reversed parallelogram, [/ \] for trapezoid, [\ /] for reversed trapezoid.",
     ],
     er_diagram_special_rules: [
       "No Hyphens: Entity names in erDiagram MUST NOT contain hyphens (e.g., use ReferralLink or referral_link, NOT referral-link).",
@@ -84,8 +86,6 @@ export const instructions_text_to_diagram = JSON.stringify(
       "The response MUST always start with the JSON object - no preamble"
     ]
   },
-  null,
-  2
 );
 
 
@@ -137,8 +137,6 @@ export const instructions_diagram_to_title = JSON.stringify(
       "Never include code snippets in response"
     ]
   },
-  null,
-  2
 );
 
 
@@ -193,8 +191,6 @@ export const instructions_diagram_enhancer = JSON.stringify(
       "The response MUST always start with the JSON object - no preamble"
     ]
   },
-  null,
-  2
 );
 
 
@@ -292,8 +288,6 @@ export const instructions_prompt_enhancer = JSON.stringify(
       "Never make assumptions about unstated user needs"
     ]
   },
-  null,
-  2
 );
 
 
