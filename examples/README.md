@@ -1,6 +1,6 @@
 # Examples
 
-The examples are generated through [dmaid.cloud](https://dmaid.cloud). 
+The examples are generated through [https://flowcraft-95bf4.web.app/](https://flowcraft-95bf4.web.app/). 
 
 
 # Example 1
