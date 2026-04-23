@@ -13,6 +13,14 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      VITE_BACKEND_URL: https://flowcraft-api-329437257912.us-central1.run.app/api
+      VITE_FIREBASE_API_KEY: AIzaSyBT8_iF5_CqsDgd-owIKWcj-tg9aUA9nD8
+      VITE_FIREBASE_AUTH_DOMAIN: flowcraft-95bf4.firebaseapp.com
+      VITE_FIREBASE_PROJECT_ID: flowcraft-95bf4
+      VITE_FIREBASE_STORAGE_BUCKET: flowcraft-95bf4.firebasestorage.app
+      VITE_FIREBASE_MESSAGING_SENDER_ID: "725841371789"
+      VITE_FIREBASE_APP_ID: "1:725841371789:web:358bdb65cc85986a0fb8c4"
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -38,8 +46,9 @@ jobs:
         with:
           service: ${{ env.SERVICE_NAME }}
           region: ${{ env.REGION }}
-          image: us-central1-docker.pkg.dev/${{ env.PROJECT_ID }}/flowcraft/${{ env.SERVICE_NAME }}
-          flags: '--allow-unauthenticated --port=8080'
+          image: us-central1-docker.pkg.dev/${{ env.PROJECT_ID }}/flowcraft/${{
+            env.SERVICE_NAME }}
+          flags: "--allow-unauthenticated --port=8080"
           env_vars: |-
             GOOGLE_GEMINI_API_KEY=${{ secrets.GOOGLE_GEMINI_API_KEY }}
             GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}
@@ -55,14 +64,6 @@ jobs:
       - name: Build Client
         run: npm run build
         working-directory: ./client
-        env:
-          VITE_BACKEND_URL: https://flowcraft-api-329437257912.us-central1.run.app/api # Your Cloud Run URL
-          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
-          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
-          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
-          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
-          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
-          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
 
       - name: Deploy to Firebase Hosting
         uses: FirebaseExtended/action-hosting-deploy@v0
